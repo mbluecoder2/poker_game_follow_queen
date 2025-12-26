@@ -1113,10 +1113,11 @@ class StudFollowQueenGame(BasePokerGame):
 
 
 # Global game instance
-game = HoldemGame()
+# Start with Follow the Queen for testing
+game = StudFollowQueenGame(num_players=8, starting_chips=1000, ante_amount=5, bring_in_amount=10)
 
 # Available player names
-PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G']
+PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2']
 taken_names = {}  # Maps session_id to player_name
 
 def broadcast_name_availability():
@@ -1154,14 +1155,18 @@ def handle_disconnect():
 @socketio.on('join_game')
 def handle_join_game(data):
     """Handle player joining the game."""
+    print(f"JOIN_GAME event received: {data}")  # DEBUG
     player_name = data.get('name', f'Player {len(game.players) + 1}')
+    print(f"Player name: {player_name}")  # DEBUG
 
     # Check if name is already taken
     if player_name in taken_names.values():
+        print(f"Name {player_name} already taken")  # DEBUG
         emit('join_failed', {'message': f'{player_name} is already taken. Please select another name.'})
         return
 
     player_id, message = game.add_player(request.sid, player_name)
+    print(f"Add player result: player_id={player_id}, message={message}")  # DEBUG
 
     if player_id is None:
         emit('join_failed', {'message': message})
@@ -1169,6 +1174,11 @@ def handle_join_game(data):
         # Mark name as taken
         taken_names[request.sid] = player_name
         emit('join_success', {'player_id': player_id, 'name': player_name})
+        print(f"Player {player_name} joined successfully. Total players: {len(game.players)}")  # DEBUG
+
+        # NOTE: Auto-start removed. Use "Start Game" button when ready.
+        # Players can now join until game is manually started.
+
         # Broadcast updated state to all players
         broadcast_game_state()
         # Broadcast updated name availability
@@ -1177,9 +1187,14 @@ def handle_join_game(data):
 @socketio.on('new_game')
 def handle_new_game(data):
     """Handle new game creation."""
-    global game
+    global game, taken_names
     game_mode = data.get('game_mode', 'holdem')
     num_players = data.get('num_players', 6)
+
+    # Save existing players and their session mappings if any
+    existing_players = []
+    if game and len(game.players) > 0:
+        existing_players = list(game.players)  # Make a copy
 
     if game_mode == 'stud_follow_queen':
         game = StudFollowQueenGame(
@@ -1196,16 +1211,32 @@ def handle_new_game(data):
             big_blind=20
         )
 
+    # Re-add existing players to the new game
+    for player in existing_players:
+        game.add_player(player['session_id'], player['name'])
+        # Update taken_names to track this player
+        taken_names[player['session_id']] = player['name']
+
+    # If we have players, auto-start and deal
+    if len(game.players) >= 1:  # Changed to 1 for testing
+        game.game_started = True
+        game.new_hand()
+
     broadcast_game_state()
+    broadcast_name_availability()
 
 @socketio.on('start_game')
 def handle_start_game():
-    """Lock the game and prevent new players from joining."""
+    """Lock the game, prevent new players from joining, and auto-deal the first hand."""
     if len(game.players) < 2:
         emit('error', {'message': 'Need at least 2 players to start the game'})
         return
 
     game.game_started = True
+
+    # Auto-deal the first hand
+    game.new_hand()
+
     broadcast_game_state()
     socketio.emit('game_locked', {'message': 'Game has started! No more players can join.'}, room='poker_game')
 
@@ -1225,6 +1256,51 @@ def handle_new_hand():
 
     game.new_hand()
     broadcast_game_state()
+
+@socketio.on('reset_game')
+def handle_reset_game():
+    """Reset the entire game - only Michael H can do this."""
+    global game, taken_names
+
+    player_id = game.get_player_by_session(request.sid)
+
+    # Find the player and check if they are "Michael H"
+    if player_id is None:
+        emit('error', {'message': 'You are not in this game'})
+        return
+
+    player = game.players[player_id]
+    if player['name'] != 'Michael H':
+        emit('error', {'message': 'Only Michael H can reset the game'})
+        return
+
+    # Reset the game
+    game_mode = game.get_state()['game_mode']
+    num_players = game.num_players
+
+    # Clear taken names
+    taken_names.clear()
+
+    # Create new game instance
+    if game_mode == 'stud_follow_queen':
+        game = StudFollowQueenGame(
+            num_players=num_players,
+            starting_chips=1000,
+            ante_amount=5,
+            bring_in_amount=10
+        )
+    else:
+        game = HoldemGame(
+            num_players=num_players,
+            starting_chips=1000,
+            small_blind=10,
+            big_blind=20
+        )
+
+    # Notify all clients
+    socketio.emit('game_reset', {'message': 'Game has been reset by Michael H'}, room='poker_game')
+    broadcast_game_state()
+    broadcast_name_availability()
 
 @socketio.on('player_action')
 def handle_player_action(data):
@@ -1298,9 +1374,12 @@ def handle_determine_winner():
 
 def broadcast_game_state():
     """Broadcast game state to all connected clients."""
+    print(f"BROADCASTING GAME STATE - Players: {len(game.players)}, Phase: {game.phase if hasattr(game, 'phase') else 'N/A'}")  # DEBUG
+
     # Send personalized state to each player in the game
     for session_id, player_id in game.player_sessions.items():
         state = game.get_state(for_session=session_id)
+        print(f"  Sending to session {session_id}: players={len(state.get('players', []))}, game_mode={state.get('game_mode')}")  # DEBUG
         socketio.emit('game_state', state, room=session_id)
 
     # Also broadcast a generic state to spectators (those not in player_sessions)
@@ -1812,6 +1891,143 @@ HTML_TEMPLATE = '''
                 height: 77px;
             }
         }
+
+        /* Game Mode Container Display */
+        #holdemTable, #studTable {
+            display: none;
+        }
+
+        [data-game-mode="holdem"] #holdemTable {
+            display: block;
+        }
+
+        [data-game-mode="stud_follow_queen"] #studTable {
+            display: block;
+        }
+
+        /* Wild Card Panel Prominence */
+        #wildCardPanel {
+            background: linear-gradient(135deg, #8b008b 0%, #ff1493 100%);
+            border: 3px solid #ff69b4;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 1200px;
+            box-shadow: 0 0 30px rgba(255, 105, 180, 0.6);
+            animation: wildGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes wildGlow {
+            0%, 100% { box-shadow: 0 0 30px rgba(255, 105, 180, 0.6); }
+            50% { box-shadow: 0 0 50px rgba(255, 105, 180, 1); }
+        }
+
+        #wildCardPanel .current-wild {
+            font-size: 2.5rem;
+            color: #ffd700;
+            text-align: center;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #wildCardPanel .wild-history {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .wild-change-badge {
+            background: rgba(0,0,0,0.3);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        /* Stud Player Card Layout */
+        .stud-players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .stud-player-card {
+            background: rgba(0,0,0,0.4);
+            border-radius: 15px;
+            padding: 20px;
+            border: 3px solid transparent;
+        }
+
+        .stud-player-card.active {
+            border-color: #ffd700;
+            box-shadow: 0 0 20px rgba(255,215,0,0.5);
+        }
+
+        .stud-player-card.folded {
+            opacity: 0.5;
+        }
+
+        .stud-player-card .player-info {
+            margin-bottom: 15px;
+        }
+
+        .card-progression {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .down-cards-group, .up-cards-group {
+            flex: 1;
+        }
+
+        .down-cards-group label, .up-cards-group label {
+            display: block;
+            text-align: center;
+            color: #ffd700;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .cards-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .cards-vertical .card {
+            margin: 0;
+        }
+
+        /* Visual distinction for down cards group */
+        .down-cards-group {
+            background: rgba(139, 0, 0, 0.2);
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        /* Visual distinction for up cards group */
+        .up-cards-group {
+            background: rgba(0, 100, 0, 0.2);
+            border: 2px solid rgba(0, 255, 0, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        /* Street Indicators */
+        .street-indicator {
+            font-size: 0.7rem;
+            color: #aaa;
+            text-align: center;
+            margin-top: 3px;
+        }
     </style>
 </head>
 <body>
@@ -1854,11 +2070,12 @@ HTML_TEMPLATE = '''
         <button class="btn btn-primary" onclick="newGame()">New Game</button>
         <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none;">Start Game</button>
         <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none;">New Hand</button>
+        <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="display: none; background: linear-gradient(145deg, #e74c3c, #c0392b);">🔄 Reset Game</button>
         <button class="btn btn-primary" onclick="toggleAlgorithmInfo()">📚 Shuffle Info</button>
     </div>
     
     <div class="game-container">
-        <div class="game-status" id="gameStatus">Click "New Game" to start!</div>
+        <div class="game-status" id="gameStatus">Select your name and click "Join Game" to enter.</div>
         
         <div class="algorithm-info" id="algorithmInfo">
             <h2>🔀 Fisher-Yates Shuffle Algorithm</h2>
@@ -1899,27 +2116,49 @@ HTML_TEMPLATE = '''
                 <p><strong>Time Complexity:</strong> O(n) | <strong>Space:</strong> O(1) | <strong>Permutations:</strong> 52! = 8.07 × 10<sup>67</sup></p>
             </div>
         </div>
-        
-        <div class="poker-table" id="pokerTable">
-            <div class="pot-display">
-                <div class="pot-amount">Pot: $<span id="potAmount">0</span></div>
-                <div class="phase-display">Phase: <span id="phaseDisplay">-</span></div>
-                <div class="wild-card-display" id="wildCardDisplay" style="display: none;">
-                    <span style="font-size: 1.1rem; color: #ff69b4;">
-                        🃏 Wild Cards: <span id="wildCardRank">Queens Only</span>
-                    </span>
-                </div>
+
+        <!-- Wild Card Panel (Stud only) -->
+        <div id="wildCardPanel" style="display: none;">
+            <div class="current-wild" id="currentWild">
+                🃏 Wild Cards: <span style="font-size: 3rem;">Queens Only</span>
             </div>
-            
-            <div class="community-cards" id="communityCards">
-                <!-- Community cards appear here -->
-            </div>
-            
-            <div class="players-area" id="playersArea">
-                <!-- Player spots appear here -->
+            <div class="wild-history" id="wildHistory">
+                <div class="wild-change-badge">No wild card changes yet</div>
             </div>
         </div>
-        
+
+        <!-- Texas Hold'em Table -->
+        <div id="holdemTable">
+            <div class="poker-table" id="pokerTable">
+                <div class="pot-display">
+                    <div class="pot-amount">Pot: $<span id="potAmount">0</span></div>
+                    <div class="phase-display">Phase: <span id="phaseDisplay">-</span></div>
+                </div>
+
+                <div class="community-cards" id="communityCards">
+                    <!-- Community cards appear here -->
+                </div>
+
+                <div class="players-area" id="playersArea">
+                    <!-- Player spots appear here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Follow the Queen (Stud) Table -->
+        <div id="studTable">
+            <div class="poker-table">
+                <div class="pot-display">
+                    <div class="pot-amount">Pot: $<span id="studPotAmount">0</span></div>
+                    <div class="phase-display">Phase: <span id="studPhaseDisplay">-</span></div>
+                </div>
+
+                <div class="stud-players-grid" id="studPlayersGrid">
+                    <!-- Stud player cards appear here -->
+                </div>
+            </div>
+        </div>
+
         <div class="action-panel" id="actionPanel" style="display: none;">
             <div class="action-buttons" id="actionButtons">
                 <button class="btn btn-fold" onclick="playerAction('fold')">Fold</button>
@@ -1948,6 +2187,7 @@ HTML_TEMPLATE = '''
         let socket = io();
         let gameState = null;
         let sessionId = null;
+        let myPlayerName = null;
 
         // Socket.IO event listeners
         socket.on('connected', (data) => {
@@ -1960,9 +2200,11 @@ HTML_TEMPLATE = '''
         });
 
         socket.on('join_success', (data) => {
+            myPlayerName = data.name;
             document.getElementById('joinSection').style.display = 'none';
             document.getElementById('gameControls').style.display = 'flex';
-            document.getElementById('gameTitle').textContent = `🃏 Texas Hold'em Poker - Multiplayer - ${data.name}`;
+            document.getElementById('gameTitle').textContent = `🃏 Poker - Multiplayer - ${data.name}`;
+            updateResetButtonVisibility();
             updateStatusMessage();
         });
 
@@ -1972,13 +2214,23 @@ HTML_TEMPLATE = '''
 
         socket.on('game_state', (state) => {
             gameState = state;
+
+            // Safe logging with null checks
+            const playerInfo = state.players ? state.players.map(p => {
+                const cardCount = p.hole_cards ? p.hole_cards.length :
+                                 (p.down_cards && p.up_cards ? p.down_cards.length + p.up_cards.length : 0);
+                return { id: p.id, name: p.name, cards: cardCount };
+            }) : [];
+
             console.log('Game state received:', {
                 myPlayerId: state.my_player_id,
                 currentPlayer: state.current_player,
                 isMyTurn: state.is_my_turn,
                 gameStarted: state.game_started,
-                players: state.players.map(p => ({ id: p.id, name: p.name, cards: p.hole_cards.length }))
+                gameMode: state.game_mode,
+                players: playerInfo
             });
+
             updateDisplay();
             updateButtons();
             updateStatusMessage();
@@ -1986,6 +2238,12 @@ HTML_TEMPLATE = '''
 
         socket.on('game_locked', (data) => {
             console.log(data.message);
+        });
+
+        socket.on('game_reset', (data) => {
+            // Game has been reset - reload the page to start fresh
+            alert(data.message);
+            location.reload();
         });
 
         socket.on('winners', (data) => {
@@ -2044,15 +2302,20 @@ HTML_TEMPLATE = '''
         }
 
         function joinGame() {
+            console.log('joinGame() called');  // DEBUG
             const playerName = document.getElementById('playerName').value.trim();
+            console.log('Player name:', playerName);  // DEBUG
 
             if (!playerName || playerName === '') {
+                console.log('No player name selected');  // DEBUG
                 document.getElementById('joinStatus').textContent = 'Please select a name';
                 return;
             }
 
             document.getElementById('joinStatus').textContent = '';
+            console.log('Emitting join_game event with name:', playerName);  // DEBUG
             socket.emit('join_game', { name: playerName });
+            console.log('join_game event emitted');  // DEBUG
         }
 
         function newGame() {
@@ -2067,6 +2330,12 @@ HTML_TEMPLATE = '''
 
         function newHand() {
             socket.emit('new_hand');
+        }
+
+        function resetGame() {
+            if (confirm('Are you sure you want to reset the entire game? This will clear all players and start fresh.')) {
+                socket.emit('reset_game');
+            }
         }
 
         function playerAction(action) {
@@ -2110,6 +2379,16 @@ HTML_TEMPLATE = '''
             }
         }
 
+        function updateResetButtonVisibility() {
+            const resetBtn = document.getElementById('resetGameBtn');
+            // Only show reset button for "Michael H"
+            if (myPlayerName === 'Michael H') {
+                resetBtn.style.display = 'inline-block';
+            } else {
+                resetBtn.style.display = 'none';
+            }
+        }
+
         function updateStatusMessage() {
             if (!gameState) return;
 
@@ -2148,63 +2427,205 @@ HTML_TEMPLATE = '''
             `;
         }
 
-        function updateDisplay() {
-            if (!gameState) return;
+        function updateWildCardDisplay(gameState) {
+            try {
+                const wildPanel = document.getElementById('wildCardPanel');
+                const currentWildEl = document.getElementById('currentWild');
+                const wildHistoryEl = document.getElementById('wildHistory');
 
-            const gameMode = gameState.game_mode || 'holdem';
+                if (!wildPanel || !currentWildEl || !wildHistoryEl) return;
 
-            // Phase name mapping
-            const PHASE_NAMES = {
-                'pre-flop': 'Pre-Flop',
-                'flop': 'Flop',
-                'turn': 'Turn',
-                'river': 'River',
-                'showdown': 'Showdown',
-                'third_street': 'Third Street',
-                'fourth_street': 'Fourth Street',
-                'fifth_street': 'Fifth Street',
-                'sixth_street': 'Sixth Street',
-                'seventh_street': 'Seventh Street'
-            };
+                if (gameState.game_mode !== 'stud_follow_queen') {
+                    wildPanel.style.display = 'none';
+                    return;
+                }
+
+                wildPanel.style.display = 'block';
+
+            // Current wild rank
+            const wildRank = gameState.current_wild_rank;
+            const wildText = wildRank === 'Q' ? 'Queens Only' : `Queens and ${wildRank}s`;
+            currentWildEl.innerHTML = `🃏 Wild Cards: <span style="font-size: 3rem;">${wildText}</span>`;
+
+            // Wild card history
+            if (gameState.wild_card_history && gameState.wild_card_history.length > 0) {
+                let historyHTML = '';
+                gameState.wild_card_history.forEach((change, i) => {
+                    historyHTML += `
+                        <div class="wild-change-badge">
+                            ${change.phase.replace('_', ' ')}: ${change.player_name} → ${change.new_wild_rank}s wild
+                        </div>
+                    `;
+                });
+                wildHistoryEl.innerHTML = historyHTML;
+            } else {
+                wildHistoryEl.innerHTML = '<div class="wild-change-badge">No wild card changes yet</div>';
+            }
+            } catch (error) {
+                console.error('Error in updateWildCardDisplay:', error);
+            }
+        }
+
+        function renderStudTable(gameState) {
+            try {
+                // Safety check for players array
+                if (!gameState || !gameState.players || !Array.isArray(gameState.players)) {
+                    console.warn('Invalid gameState in renderStudTable', {
+                        hasGameState: !!gameState,
+                        hasPlayers: !!gameState?.players,
+                        isArray: Array.isArray(gameState?.players),
+                        playersLength: gameState?.players?.length,
+                        gameState: gameState
+                    });
+                    return;
+                }
+
+                // New Stud-specific rendering
+                console.log('renderStudTable called with', gameState.players.length, 'players');  // DEBUG
+                const studPlayersGrid = document.getElementById('studPlayersGrid');
+                console.log('studPlayersGrid element found:', !!studPlayersGrid);  // DEBUG
+                if (!studPlayersGrid) {
+                    console.error('studPlayersGrid element not found!');  // DEBUG
+                    return;
+                }
+
+            let playersHTML = '';
+            gameState.players.forEach((player, idx) => {
+                const isActive = idx === gameState.current_player && !gameState.round_complete;
+
+                // Build down cards HTML (vertical)
+                let downCardsHTML = '';
+                (player.down_cards || []).forEach((card, i) => {
+                    downCardsHTML += createCardHTML(card);
+                    downCardsHTML += `<div class="street-indicator">Down ${i + 1}</div>`;
+                });
+
+                // Build up cards HTML (vertical with street labels)
+                let upCardsHTML = '';
+                (player.up_cards || []).forEach((card, i) => {
+                    upCardsHTML += createCardHTML(card);
+                    const street = i === 0 ? '3rd' : i === 1 ? '4th' : i === 2 ? '5th' : '6th';
+                    upCardsHTML += `<div class="street-indicator">${street} Street</div>`;
+                });
+
+                // Player status
+                let statusHTML = '';
+                if (player.folded) {
+                    statusHTML = '<span class="player-status status-folded">FOLDED</span>';
+                } else if (player.is_all_in) {
+                    statusHTML = '<span class="player-status status-all-in">ALL IN</span>';
+                }
+
+                // Hand result
+                let handResultHTML = '';
+                if (player.hand_result && gameState.phase === 'showdown') {
+                    handResultHTML = `<div class="hand-result">${player.hand_result.name}</div>`;
+                }
+
+                playersHTML += `
+                    <div class="stud-player-card ${isActive ? 'active' : ''} ${player.folded ? 'folded' : ''}">
+                        <div class="player-info">
+                            <div class="player-name">
+                                ${player.name}
+                                ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
+                            </div>
+                            <div class="player-chips">$${player.chips}</div>
+                            ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${player.current_bet}</div>` : ''}
+                            ${statusHTML}
+                            ${handResultHTML}
+                        </div>
+                        <div class="card-progression">
+                            <div class="down-cards-group">
+                                <label>Down Cards</label>
+                                <div class="cards-vertical">
+                                    ${downCardsHTML || '<div style="color: #666;">No cards yet</div>'}
+                                </div>
+                            </div>
+                            <div class="up-cards-group">
+                                <label>Up Cards</label>
+                                <div class="cards-vertical">
+                                    ${upCardsHTML || '<div style="color: #666;">No cards yet</div>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            studPlayersGrid.innerHTML = playersHTML;
+
+            // Update Stud pot and phase
+            const studPotEl = document.getElementById('studPotAmount');
+            const studPhaseEl = document.getElementById('studPhaseDisplay');
+
+            if (studPotEl) studPotEl.textContent = gameState.pot;
+
+            if (studPhaseEl) {
+                const PHASE_NAMES = {
+                    'third_street': 'Third Street',
+                    'fourth_street': 'Fourth Street',
+                    'fifth_street': 'Fifth Street',
+                    'sixth_street': 'Sixth Street',
+                    'seventh_street': 'Seventh Street',
+                    'showdown': 'Showdown'
+                };
+                studPhaseEl.textContent = PHASE_NAMES[gameState.phase] || gameState.phase;
+            }
+            } catch (error) {
+                console.error('Error in renderStudTable:', error);
+            }
+        }
+
+        function renderHoldemTable(gameState) {
+            try {
+            // Safety check for players array
+            if (!gameState || !gameState.players || !Array.isArray(gameState.players)) {
+                console.warn('Invalid gameState in renderHoldemTable');
+                return;
+            }
 
             // Update pot and phase
-            document.getElementById('potAmount').textContent = gameState.pot;
-            document.getElementById('phaseDisplay').textContent = PHASE_NAMES[gameState.phase] || gameState.phase;
+            const potEl = document.getElementById('potAmount');
+            const phaseEl = document.getElementById('phaseDisplay');
 
-            // Update wild card display (Stud only)
-            const wildCardDiv = document.getElementById('wildCardDisplay');
-            if (gameMode === 'stud_follow_queen') {
-                wildCardDiv.style.display = 'block';
-                const wildRank = gameState.current_wild_rank;
-                const wildText = wildRank === 'Q' ? 'Queens Only' : `Queens and ${wildRank}s`;
-                document.getElementById('wildCardRank').textContent = wildText;
-            } else {
-                wildCardDiv.style.display = 'none';
+            if (potEl) potEl.textContent = gameState.pot;
+
+            if (phaseEl) {
+                const PHASE_NAMES = {
+                    'pre-flop': 'Pre-Flop',
+                    'flop': 'Flop',
+                    'turn': 'Turn',
+                    'river': 'River',
+                    'showdown': 'Showdown'
+                };
+                phaseEl.textContent = PHASE_NAMES[gameState.phase] || gameState.phase;
             }
 
-            // Update community cards (Hold'em only)
+            // Update community cards
             const communityDiv = document.getElementById('communityCards');
-            let communityHTML = '';
+            if (communityDiv) {
+                let communityHTML = '';
 
-            if (gameMode === 'holdem' && gameState.community_cards) {
-                // Show placeholders for unrevealed cards
-                const totalCommunity = 5;
-                const revealed = gameState.community_cards.length;
+                if (gameState.community_cards) {
+                    const totalCommunity = 5;
+                    const revealed = gameState.community_cards.length;
 
-                for (let i = 0; i < totalCommunity; i++) {
-                    if (i < revealed) {
-                        communityHTML += createCardHTML(gameState.community_cards[i], 'community card-deal');
-                    } else {
-                        communityHTML += '<div class="card community placeholder"></div>';
+                    for (let i = 0; i < totalCommunity; i++) {
+                        if (i < revealed) {
+                            communityHTML += createCardHTML(gameState.community_cards[i], 'community card-deal');
+                        } else {
+                            communityHTML += '<div class="card community placeholder"></div>';
+                        }
                     }
                 }
+                communityDiv.innerHTML = communityHTML;
             }
-            communityDiv.innerHTML = communityHTML;
-            
+
             // Update players
             const playersDiv = document.getElementById('playersArea');
+            if (!playersDiv) return;
             let playersHTML = '';
-            
+
             gameState.players.forEach((player, idx) => {
                 const isActive = idx === gameState.current_player && !gameState.round_complete;
                 const classes = [
@@ -2213,29 +2634,20 @@ HTML_TEMPLATE = '''
                     player.folded ? 'folded' : '',
                     player.is_human ? 'human' : ''
                 ].filter(Boolean).join(' ');
-                
+
                 let statusHTML = '';
                 if (player.folded) {
                     statusHTML = '<span class="player-status status-folded">FOLDED</span>';
                 } else if (player.is_all_in) {
                     statusHTML = '<span class="player-status status-all-in">ALL IN</span>';
                 }
-                
+
                 let handResultHTML = '';
                 if (player.hand_result && gameState.phase === 'showdown') {
                     handResultHTML = `<div class="hand-result">${player.hand_result.name}</div>`;
                 }
-                
-                // Card display - different for Hold'em vs Stud
-                let cardsHTML = '';
-                if (gameMode === 'holdem') {
-                    cardsHTML = player.hole_cards ? player.hole_cards.map(c => createCardHTML(c)).join('') : '';
-                } else {
-                    // Stud: show down cards and up cards separately
-                    const downCards = player.down_cards ? player.down_cards.map(c => createCardHTML(c, 'down')).join('') : '';
-                    const upCards = player.up_cards ? player.up_cards.map(c => createCardHTML(c, 'up')).join('') : '';
-                    cardsHTML = downCards + upCards;
-                }
+
+                const cardsHTML = player.hole_cards ? player.hole_cards.map(c => createCardHTML(c)).join('') : '';
 
                 playersHTML += `
                     <div class="${classes}">
@@ -2254,9 +2666,48 @@ HTML_TEMPLATE = '''
                 `;
             });
             playersDiv.innerHTML = playersHTML;
-            
-            // Update action panel
-            updateActionPanel();
+            } catch (error) {
+                console.error('Error in renderHoldemTable:', error);
+            }
+        }
+
+        function updateDisplay() {
+            if (!gameState) return;
+
+            try {
+                const gameMode = gameState.game_mode || 'holdem';
+                console.log('updateDisplay called with gameMode:', gameMode);  // DEBUG
+
+                // Set game mode attribute on container for CSS switching
+                const container = document.querySelector('.game-container');
+                console.log('Container found:', !!container);  // DEBUG
+                if (container) {
+                    container.setAttribute('data-game-mode', gameMode);
+                    console.log('Set data-game-mode to:', gameMode);  // DEBUG
+                }
+
+                // Update title based on game mode
+                const gameTitle = gameMode === 'holdem' ? "Texas Hold'em Poker" : "Follow the Queen Poker";
+                const titleElement = document.getElementById('gameTitle');
+                if (titleElement && myPlayerName) {
+                    titleElement.textContent = `🃏 ${gameTitle} - Multiplayer - ${myPlayerName}`;
+                } else if (titleElement) {
+                    titleElement.textContent = `🃏 ${gameTitle} - Multiplayer`;
+                }
+
+                // Route to appropriate renderer based on game mode
+                if (gameMode === 'holdem') {
+                    renderHoldemTable(gameState);
+                } else if (gameMode === 'stud_follow_queen') {
+                    updateWildCardDisplay(gameState);
+                    renderStudTable(gameState);
+                }
+
+                // Update action panel (common to both)
+                updateActionPanel();
+            } catch (error) {
+                console.error('Error in updateDisplay:', error);
+            }
         }
         
         function updateActionPanel() {
