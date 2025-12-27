@@ -1224,10 +1224,8 @@ def handle_new_game(data):
         # Update taken_names to track this player
         taken_names[player['session_id']] = player['name']
 
-    # If we have players, auto-start and deal
-    if len(game.players) >= 1:  # Changed to 1 for testing
-        game.game_started = True
-        game.new_hand()
+    # NOTE: Auto-start removed. Use "Start Game" button when ready.
+    # Players can now join until game is manually started.
 
     broadcast_game_state()
     broadcast_name_availability()
