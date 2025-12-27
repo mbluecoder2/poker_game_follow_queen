@@ -412,6 +412,7 @@ class BasePokerGame:
             player['folded'] = False
             player['is_all_in'] = False
             player['hand_result'] = None
+            player['cards_revealed'] = False  # Reset reveal status for new hand
             # Subclass-specific card fields will be reset in _reset_player_cards
 
         self._reset_player_cards()
@@ -1072,17 +1073,23 @@ class StudFollowQueenGame(BasePokerGame):
                 'is_dealer': self.players.index(p) == self.dealer_position
             }
 
-            # Card visibility: show all cards to owner or at showdown
-            if p['id'] == player_id or self.phase == 'showdown':
+            # Card visibility: show cards only to owner OR if player has revealed them
+            # At showdown, cards stay hidden until player clicks to reveal
+            is_owner = p['id'] == player_id
+            has_revealed = p.get('cards_revealed', False)
+
+            if is_owner or has_revealed:
                 player_data['down_cards'] = p.get('down_cards', [])
                 player_data['up_cards'] = p.get('up_cards', [])
                 if p.get('hand_result'):
                     player_data['hand_result'] = p['hand_result']
+                player_data['cards_revealed'] = has_revealed
             else:
-                # Hide down cards from opponents
+                # Hide down cards from opponents until they reveal
                 down_cards = p.get('down_cards', [])
                 player_data['down_cards'] = [{'rank': '?', 'suit': 'back', 'symbol': ''}] * len(down_cards)
                 player_data['up_cards'] = p.get('up_cards', [])  # Up cards always visible
+                player_data['cards_revealed'] = False
 
             players_state.append(player_data)
 
@@ -1259,7 +1266,7 @@ def handle_new_hand():
 
 @socketio.on('reset_game')
 def handle_reset_game():
-    """Reset the entire game - only Michael H can do this."""
+    """Reset the entire game - only Michael H can do this. Restarts the server."""
     global game, taken_names
 
     player_id = game.get_player_by_session(request.sid)
@@ -1274,33 +1281,63 @@ def handle_reset_game():
         emit('error', {'message': 'Only Michael H can reset the game'})
         return
 
-    # Reset the game
-    game_mode = game.get_state()['game_mode']
-    num_players = game.num_players
+    # Notify all clients that server is restarting
+    socketio.emit('server_restart', {'message': 'Server is restarting... Please wait and refresh.'}, room='poker_game')
 
-    # Clear taken names
-    taken_names.clear()
+    print("\n" + "=" * 50)
+    print("SERVER RESTART TRIGGERED BY MICHAEL H")
+    print("=" * 50 + "\n")
 
-    # Create new game instance
-    if game_mode == 'stud_follow_queen':
-        game = StudFollowQueenGame(
-            num_players=num_players,
-            starting_chips=1000,
-            ante_amount=5,
-            bring_in_amount=10
-        )
-    else:
-        game = HoldemGame(
-            num_players=num_players,
-            starting_chips=1000,
-            small_blind=10,
-            big_blind=20
-        )
+    # Give clients a moment to receive the message
+    import time
+    time.sleep(0.5)
 
-    # Notify all clients
-    socketio.emit('game_reset', {'message': 'Game has been reset by Michael H'}, room='poker_game')
+    # Restart the server by re-executing the script
+    import sys
+    import os
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+@socketio.on('reveal_cards')
+def handle_reveal_cards():
+    """Allow a player to reveal their down cards to all other players at showdown."""
+    global game
+
+    player_id = game.get_player_by_session(request.sid)
+
+    if player_id is None:
+        emit('error', {'message': 'You are not in this game'})
+        return
+
+    # Only allow during showdown
+    if game.phase != 'showdown':
+        emit('error', {'message': 'You can only reveal cards at showdown'})
+        return
+
+    player = game.players[player_id]
+
+    # Mark player as having revealed their cards
+    player['cards_revealed'] = True
+
+    # Get the player's actual down cards (not hidden)
+    down_cards = []
+    for card in player.get('down_cards', []):
+        down_cards.append({
+            'rank': card['rank'],
+            'suit': card['suit'],
+            'hidden': False
+        })
+
+    # Broadcast to all players that this player revealed their cards
+    socketio.emit('cards_revealed', {
+        'player_id': player_id,
+        'player_name': player['name'],
+        'cards': down_cards
+    }, room='poker_game')
+
+    # Broadcast updated game state so all clients show the revealed cards
     broadcast_game_state()
-    broadcast_name_availability()
+
+    print(f"{player['name']} revealed their down cards")
 
 @socketio.on('player_action')
 def handle_player_action(data):
@@ -1359,18 +1396,8 @@ def handle_determine_winner():
     }, room='poker_game')
     broadcast_game_state()
 
-    # Auto-start next hand after 3 seconds
-    import threading
-    def auto_deal_next_hand():
-        import time
-        time.sleep(3)
-        if len(game.players) >= 2:
-            game.new_hand()
-            broadcast_game_state()
-
-    thread = threading.Thread(target=auto_deal_next_hand)
-    thread.daemon = True
-    thread.start()
+    # Game stays at showdown - no auto-deal
+    # Players can review cards and click "New Hand" when ready
 
 def broadcast_game_state():
     """Broadcast game state to all connected clients."""
@@ -1427,7 +1454,7 @@ HTML_TEMPLATE = '''
         }
         
         .game-container {
-            max-width: 1200px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -1660,21 +1687,51 @@ HTML_TEMPLATE = '''
             font-size: 24px;
         }
         
-        /* Action Panel */
+        /* Action Panel - Floating Toolbar */
         .action-panel {
-            background: rgba(0,0,0,0.6);
-            border-radius: 15px;
-            padding: 20px;
-            margin-top: 20px;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(145deg, rgba(0,0,0,0.9), rgba(30,30,30,0.95));
+            border-radius: 20px;
+            padding: 20px 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(255,215,0,0.3);
+            border: 2px solid rgba(255,215,0,0.5);
+            z-index: 1000;
+            animation: floatIn 0.3s ease-out;
+        }
+
+        @keyframes floatIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .action-panel::before {
+            content: "🎯 YOUR TURN";
+            display: block;
+            text-align: center;
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255,215,0,0.5);
         }
         
         .action-buttons {
             display: flex;
             justify-content: center;
-            gap: 10px;
+            gap: 15px;
             flex-wrap: wrap;
         }
-        
+
         .btn {
             padding: 12px 25px;
             font-size: 1rem;
@@ -1684,26 +1741,39 @@ HTML_TEMPLATE = '''
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .btn:hover:not(:disabled) {
             transform: translateY(-2px);
         }
-        
+
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        
+
+        /* Action button specific styles - larger for floating toolbar */
+        .action-panel .btn {
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            min-width: 100px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .action-panel .btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+        }
+
         .btn-fold {
             background: linear-gradient(145deg, #c0392b, #a93226);
             color: white;
         }
-        
+
         .btn-check, .btn-call {
             background: linear-gradient(145deg, #27ae60, #229954);
             color: white;
         }
-        
+
         .btn-raise {
             background: linear-gradient(145deg, #f39c12, #d68910);
             color: white;
@@ -1912,7 +1982,7 @@ HTML_TEMPLATE = '''
             border-radius: 15px;
             padding: 20px;
             margin: 20px auto;
-            max-width: 1200px;
+            max-width: 1600px;
             box-shadow: 0 0 30px rgba(255, 105, 180, 0.6);
             animation: wildGlow 2s ease-in-out infinite;
         }
@@ -1948,8 +2018,10 @@ HTML_TEMPLATE = '''
         /* Stud Player Card Layout */
         .stud-players-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
             padding: 20px;
         }
 
@@ -1981,6 +2053,7 @@ HTML_TEMPLATE = '''
 
         .down-cards-group, .up-cards-group {
             flex: 1;
+            min-width: 140px;
         }
 
         .down-cards-group label, .up-cards-group label {
@@ -1996,9 +2069,10 @@ HTML_TEMPLATE = '''
 
         .cards-vertical {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            flex-wrap: wrap;
             gap: 8px;
-            align-items: center;
+            justify-content: center;
         }
 
         .cards-vertical .card {
@@ -2010,7 +2084,7 @@ HTML_TEMPLATE = '''
             background: rgba(139, 0, 0, 0.2);
             border: 2px dashed rgba(255, 255, 255, 0.3);
             border-radius: 10px;
-            padding: 10px;
+            padding: 15px;
         }
 
         /* Visual distinction for up cards group */
@@ -2018,7 +2092,7 @@ HTML_TEMPLATE = '''
             background: rgba(0, 100, 0, 0.2);
             border: 2px solid rgba(0, 255, 0, 0.3);
             border-radius: 10px;
-            padding: 10px;
+            padding: 15px;
         }
 
         /* Street Indicators */
@@ -2027,6 +2101,46 @@ HTML_TEMPLATE = '''
             color: #aaa;
             text-align: center;
             margin-top: 3px;
+        }
+
+        /* Current Hand Display */
+        .current-hand-display {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #ffd700;
+            border-radius: 10px;
+            padding: 10px 15px;
+            margin-top: 15px;
+            text-align: center;
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 1.1rem;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+        }
+
+        /* Clickable reveal for down cards at showdown */
+        .clickable-reveal {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .clickable-reveal:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+            border-color: #ffd700;
+        }
+
+        .reveal-hint {
+            text-align: center;
+            color: #ffd700;
+            font-size: 0.8rem;
+            margin-top: 8px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
         }
     </style>
 </head>
@@ -2179,7 +2293,9 @@ HTML_TEMPLATE = '''
         <div class="winner-content">
             <h2>🏆 Winner!</h2>
             <div class="winner-details" id="winnerDetails"></div>
-            <button class="btn btn-primary" onclick="closeWinnerModal()">Continue</button>
+            <button class="btn btn-primary" id="winnerCloseBtn" onclick="closeWinnerModal()" disabled>
+                Wait <span id="winnerCountdown">16</span>s...
+            </button>
         </div>
     </div>
 
@@ -2246,24 +2362,61 @@ HTML_TEMPLATE = '''
             location.reload();
         });
 
-        socket.on('winners', (data) => {
-            // Show winner modal
-            let detailsHTML = '';
-            data.winners.forEach(w => {
-                detailsHTML += `<p><strong>${w.player.name}</strong> wins $${w.amount}`;
-                if (w.hand) {
-                    detailsHTML += ` with ${w.hand}`;
+        socket.on('server_restart', (data) => {
+            // Server is restarting - show message and auto-reload after delay
+            document.body.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #1a3555 0%, #2c5a8f 100%); color: white; font-family: Arial, sans-serif;">
+                    <h1 style="font-size: 3rem; margin-bottom: 20px;">🔄 Server Restarting</h1>
+                    <p style="font-size: 1.5rem; color: #ffd700;">${data.message}</p>
+                    <p style="font-size: 1.2rem; margin-top: 30px;">Page will refresh automatically in <span id="countdown">5</span> seconds...</p>
+                </div>
+            `;
+            let seconds = 5;
+            const countdown = setInterval(() => {
+                seconds--;
+                const el = document.getElementById('countdown');
+                if (el) el.textContent = seconds;
+                if (seconds <= 0) {
+                    clearInterval(countdown);
+                    location.reload();
                 }
-                detailsHTML += '</p>';
+            }, 1000);
+        });
+
+        socket.on('winners', (data) => {
+            // Display winner info in the game status area (no modal)
+            let winnerText = '';
+            data.winners.forEach(w => {
+                winnerText += `${w.player.name} wins $${w.amount}`;
+                if (w.hand) {
+                    winnerText += ` with ${w.hand}`;
+                }
+                winnerText += '. ';
             });
 
-            document.getElementById('winnerDetails').innerHTML = detailsHTML;
-            document.getElementById('winnerModal').style.display = 'flex';
+            // Update status message with winner info
+            const statusEl = document.getElementById('gameStatus');
+            if (statusEl) {
+                statusEl.innerHTML = `<strong style="color: #ffd700; font-size: 1.2rem;">🏆 ${winnerText}</strong><br><em>Click your down cards to reveal them to other players.</em>`;
+            }
 
-            // Auto-close modal after 4.5 seconds
-            setTimeout(() => {
-                document.getElementById('winnerModal').style.display = 'none';
-            }, 4500);
+            // Game stays in showdown phase - no auto-reset
+            console.log('Hand complete:', winnerText);
+        });
+
+        // Handle card reveal from other players
+        socket.on('cards_revealed', (data) => {
+            console.log('Cards revealed by player:', data.player_name, data.cards);
+            // Refresh game state to show revealed cards
+            if (gameState) {
+                // Update the player's down cards to be visible
+                const playerIdx = data.player_id;
+                if (gameState.players && gameState.players[playerIdx]) {
+                    gameState.players[playerIdx].down_cards = data.cards;
+                    gameState.players[playerIdx].cards_revealed = true;
+                    updateDisplay();
+                }
+            }
         });
 
         socket.on('error', (data) => {
@@ -2466,6 +2619,77 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // Evaluate current poker hand from visible cards
+        function evaluateCurrentHand(downCards, upCards, wildRank) {
+            // Combine all visible cards (not hidden)
+            const allCards = [];
+
+            (downCards || []).forEach(card => {
+                if (!card.hidden && card.rank && card.suit) {
+                    allCards.push(card);
+                }
+            });
+
+            (upCards || []).forEach(card => {
+                if (card.rank && card.suit) {
+                    allCards.push(card);
+                }
+            });
+
+            if (allCards.length < 2) return null;
+
+            // Count ranks and suits
+            const rankOrder = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+            const rankCounts = {};
+            const suitCounts = {};
+            let wildCount = 0;
+
+            allCards.forEach(card => {
+                // Check if this card is wild (Queen or the current wild rank)
+                const isWild = card.rank === 'Q' || (wildRank && card.rank === wildRank);
+                if (isWild) {
+                    wildCount++;
+                } else {
+                    rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1;
+                }
+                suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
+            });
+
+            // Get pairs, trips, quads
+            const counts = Object.values(rankCounts).sort((a, b) => b - a);
+            const maxOfKind = (counts[0] || 0) + wildCount;
+            const secondOfKind = counts[1] || 0;
+
+            // Check for flush (5+ of same suit)
+            const maxSuit = Math.max(...Object.values(suitCounts), 0);
+            const hasFlush = maxSuit >= 5;
+
+            // Evaluate hand
+            if (maxOfKind >= 5) return "Five of a Kind!";
+            if (maxOfKind >= 4) return "Four of a Kind";
+            if (maxOfKind >= 3 && secondOfKind >= 2) return "Full House";
+            if (hasFlush) return "Flush";
+            if (maxOfKind >= 3) return "Three of a Kind";
+            if (maxOfKind >= 2 && secondOfKind >= 2) return "Two Pair";
+            if (maxOfKind >= 2) return "Pair";
+            if (wildCount > 0) return "Wild Card";
+
+            // High card
+            const highRanks = Object.keys(rankCounts).sort((a, b) =>
+                rankOrder.indexOf(b) - rankOrder.indexOf(a)
+            );
+            if (highRanks.length > 0) {
+                const highCard = highRanks[0];
+                const displayRank = highCard === 'A' ? 'Ace' :
+                                   highCard === 'K' ? 'King' :
+                                   highCard === 'Q' ? 'Queen' :
+                                   highCard === 'J' ? 'Jack' : highCard;
+                return `${displayRank} High`;
+            }
+
+            return "No Hand";
+        }
+
         function renderStudTable(gameState) {
             try {
                 // Safety check for players array
@@ -2522,6 +2746,30 @@ HTML_TEMPLATE = '''
                     handResultHTML = `<div class="hand-result">${player.hand_result.name}</div>`;
                 }
 
+                // Check if this player's down cards are visible (not hidden)
+                // Only show hand evaluation for the current viewer's own cards
+                // Hidden cards have rank='?' or hidden=true
+                const canSeeDownCards = (player.down_cards || []).some(card => !card.hidden && card.rank !== '?');
+                let currentHandHTML = '';
+                if (canSeeDownCards && !player.folded) {
+                    const handName = evaluateCurrentHand(
+                        player.down_cards,
+                        player.up_cards,
+                        gameState.current_wild_rank
+                    );
+                    if (handName) {
+                        currentHandHTML = `<div class="current-hand-display">${handName}</div>`;
+                    }
+                }
+
+                // Check if this is the current player's own cards and it's showdown
+                const isMyCards = idx === gameState.my_player_id;
+                const isShowdown = gameState.phase === 'showdown';
+                const canReveal = isMyCards && isShowdown && !player.cards_revealed;
+                const revealClass = canReveal ? 'clickable-reveal' : '';
+                const revealClick = canReveal ? 'onclick="revealMyCards()"' : '';
+                const revealHint = canReveal ? '<div class="reveal-hint">Click to reveal</div>' : '';
+
                 playersHTML += `
                     <div class="stud-player-card ${isActive ? 'active' : ''} ${player.folded ? 'folded' : ''}">
                         <div class="player-info">
@@ -2535,11 +2783,12 @@ HTML_TEMPLATE = '''
                             ${handResultHTML}
                         </div>
                         <div class="card-progression">
-                            <div class="down-cards-group">
+                            <div class="down-cards-group ${revealClass}" ${revealClick}>
                                 <label>Down Cards</label>
                                 <div class="cards-vertical">
                                     ${downCardsHTML || '<div style="color: #666;">No cards yet</div>'}
                                 </div>
+                                ${revealHint}
                             </div>
                             <div class="up-cards-group">
                                 <label>Up Cards</label>
@@ -2548,6 +2797,7 @@ HTML_TEMPLATE = '''
                                 </div>
                             </div>
                         </div>
+                        ${currentHandHTML}
                     </div>
                 `;
             });
@@ -2756,7 +3006,13 @@ HTML_TEMPLATE = '''
             document.getElementById('winnerModal').style.display = 'none';
             document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
         }
-        
+
+        function revealMyCards() {
+            // Send request to reveal down cards to all players
+            socket.emit('reveal_cards');
+            console.log('Revealing my cards to all players');
+        }
+
         function toggleAlgorithmInfo() {
             const info = document.getElementById('algorithmInfo');
             info.style.display = info.style.display === 'none' ? 'block' : 'none';
