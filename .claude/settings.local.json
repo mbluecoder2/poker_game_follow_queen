@@ -12,7 +12,9 @@
       "Bash(cat:*)",
       "Bash(timeout:*)",
       "Bash(taskkill:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(ping:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

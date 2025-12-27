@@ -378,15 +378,18 @@ class BasePokerGame:
             return None, "You are already in the game"
 
         player_id = len(self.players)
+        name = player_name or f'Player {player_id + 1}'
+        is_bot = name.lower().startswith('bot')
         self.players.append({
             'id': player_id,
-            'name': player_name or f'Player {player_id + 1}',
+            'name': name,
             'chips': self.starting_chips,
             'hole_cards': [],
             'current_bet': 0,
             'folded': False,
             'is_all_in': False,
-            'is_human': True,
+            'is_human': not is_bot,
+            'is_bot': is_bot,
             'session_id': session_id,
             'hand_result': None
         })
@@ -1124,7 +1127,7 @@ class StudFollowQueenGame(BasePokerGame):
 game = StudFollowQueenGame(num_players=8, starting_chips=1000, ante_amount=5, bring_in_amount=10)
 
 # Available player names
-PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2']
+PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4']
 taken_names = {}  # Maps session_id to player_name
 
 def broadcast_name_availability():
@@ -1136,6 +1139,286 @@ def broadcast_name_availability():
         'taken': taken,
         'all_names': PLAYER_NAMES
     }, room='poker_game')
+
+# =============================================================================
+# BOT PLAYER LOGIC
+# =============================================================================
+
+import random
+import threading
+from collections import Counter
+
+def evaluate_bot_hand(player, wild_rank='Q'):
+    """Evaluate a bot's hand strength (0.0 to 1.0 scale).
+
+    Returns a tuple: (hand_strength, hand_name)
+    Hand strength scale:
+    - 0.0-0.15: Nothing/High card
+    - 0.15-0.30: One pair
+    - 0.30-0.45: Two pair
+    - 0.45-0.55: Three of a kind
+    - 0.55-0.65: Straight
+    - 0.65-0.75: Flush
+    - 0.75-0.85: Full house
+    - 0.85-0.92: Four of a kind
+    - 0.92-1.0: Straight flush / Five of a kind
+    """
+    down_cards = player.get('down_cards', [])
+    up_cards = player.get('up_cards', [])
+    all_cards = down_cards + up_cards
+
+    if not all_cards:
+        return 0.0, "Nothing"
+
+    # Count ranks and suits
+    ranks = []
+    suits = []
+    wild_count = 0
+
+    rank_values = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+                   '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
+
+    for card in all_cards:
+        rank = card.get('rank', '')
+        suit = card.get('suit', '')
+
+        # Check if wild (Queens always wild, plus Follow the Queen rank)
+        if rank == 'Q' or rank == wild_rank:
+            wild_count += 1
+        else:
+            if rank in rank_values:
+                ranks.append(rank)
+                suits.append(suit)
+
+    if not ranks and wild_count == 0:
+        return 0.0, "Nothing"
+
+    rank_counts = Counter(ranks)
+    suit_counts = Counter(suits)
+
+    # Get the most common rank count
+    if rank_counts:
+        most_common = rank_counts.most_common()
+        highest_count = most_common[0][1] + wild_count
+        second_count = most_common[1][1] if len(most_common) > 1 else 0
+    else:
+        highest_count = wild_count
+        second_count = 0
+
+    # Check for flush potential (5+ cards of same suit)
+    max_suit_count = max(suit_counts.values()) if suit_counts else 0
+    has_flush = (max_suit_count + wild_count) >= 5
+
+    # Check for straight potential
+    if ranks:
+        rank_nums = sorted(set(rank_values.get(r, 0) for r in ranks))
+        # Simple straight check: look for 5 consecutive or close to it
+        has_straight = False
+        for i in range(len(rank_nums) - 3):
+            span = rank_nums[min(i+4, len(rank_nums)-1)] - rank_nums[i]
+            gaps = span - 4
+            if gaps <= wild_count:
+                has_straight = True
+                break
+        # Check for wheel (A-2-3-4-5)
+        if 14 in rank_nums and 2 in rank_nums:
+            low_cards = [r for r in rank_nums if r <= 5 or r == 14]
+            if len(low_cards) + wild_count >= 5:
+                has_straight = True
+    else:
+        has_straight = False
+
+    # Determine hand strength
+    if highest_count >= 5:
+        return 0.95, "Five of a Kind"
+    elif has_straight and has_flush and len(all_cards) >= 5:
+        return 0.93, "Straight Flush"
+    elif highest_count >= 4:
+        return 0.88, "Four of a Kind"
+    elif highest_count >= 3 and second_count >= 2:
+        return 0.78, "Full House"
+    elif has_flush and len(all_cards) >= 5:
+        return 0.70, "Flush"
+    elif has_straight and len(all_cards) >= 5:
+        return 0.60, "Straight"
+    elif highest_count >= 3:
+        return 0.50, "Three of a Kind"
+    elif highest_count >= 2 and second_count >= 2:
+        return 0.38, "Two Pair"
+    elif highest_count >= 2:
+        return 0.22, "One Pair"
+    elif wild_count >= 1:
+        return 0.22, "Pair (wild)"
+    else:
+        # High card - value based on highest card
+        if ranks:
+            high_value = max(rank_values.get(r, 0) for r in ranks)
+            return 0.05 + (high_value / 14) * 0.10, "High Card"
+        return 0.05, "High Card"
+
+def get_bot_action(player, game_state, wild_rank='Q'):
+    """Determine what action a bot should take based on hand strength.
+
+    Smart bot strategy:
+    - Evaluate actual hand strength
+    - Strong hands (>0.5): Bet/raise aggressively
+    - Medium hands (0.25-0.5): Call reasonable bets, sometimes bet
+    - Weak hands (<0.25): Check when free, fold to big bets
+    - Consider pot odds vs hand strength
+    """
+    current_bet = game_state.get('current_bet', 0)
+    player_bet = player.get('current_bet', 0)
+    to_call = current_bet - player_bet
+    pot = game_state.get('pot', 0)
+    chips = player.get('chips', 0)
+    phase = game_state.get('phase', '')
+
+    # Evaluate hand strength
+    hand_strength, hand_name = evaluate_bot_hand(player, wild_rank)
+
+    # Add some randomness (personality)
+    effective_strength = hand_strength + random.uniform(-0.1, 0.1)
+    effective_strength = max(0, min(1, effective_strength))
+
+    # Calculate pot odds
+    pot_odds = to_call / (pot + to_call) if (pot + to_call) > 0 else 0
+
+    # Determine action
+    if to_call == 0:
+        # Can check for free
+        if effective_strength > 0.6:
+            # Strong hand - bet for value
+            bet_size = int(pot * (0.5 + effective_strength * 0.5))
+            bet_amount = min(chips, max(10, bet_size))
+            if random.random() < 0.7:
+                print(f"    [{player['name']} has {hand_name}, betting ${bet_amount}]")
+                return 'bet', bet_amount
+            else:
+                # Slow play sometimes
+                print(f"    [{player['name']} has {hand_name}, slow-playing]")
+                return 'check', 0
+        elif effective_strength > 0.35:
+            # Medium hand - sometimes bet, usually check
+            if random.random() < 0.3:
+                bet_amount = min(chips, max(10, pot // 3))
+                print(f"    [{player['name']} has {hand_name}, probing with ${bet_amount}]")
+                return 'bet', bet_amount
+            print(f"    [{player['name']} has {hand_name}, checking]")
+            return 'check', 0
+        else:
+            # Weak hand - check and hope to improve
+            print(f"    [{player['name']} has {hand_name}, checking]")
+            return 'check', 0
+
+    else:
+        # Must call, raise, or fold
+        # Compare hand strength to pot odds
+        call_profitable = effective_strength > pot_odds
+
+        if effective_strength > 0.65:
+            # Very strong hand - raise!
+            if random.random() < 0.6:
+                raise_amount = min(chips, to_call + int(pot * 0.75))
+                print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount}]")
+                return 'raise', raise_amount
+            print(f"    [{player['name']} has {hand_name}, calling]")
+            return 'call', 0
+
+        elif effective_strength > 0.4:
+            # Good hand - usually call, sometimes raise
+            if call_profitable or pot_odds < 0.3:
+                if random.random() < 0.2 and effective_strength > 0.5:
+                    raise_amount = min(chips, to_call + int(pot * 0.5))
+                    print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount}]")
+                    return 'raise', raise_amount
+                print(f"    [{player['name']} has {hand_name}, calling ${to_call}]")
+                return 'call', 0
+            else:
+                # Pot odds not good enough
+                if random.random() < 0.4:
+                    print(f"    [{player['name']} has {hand_name}, calling despite odds]")
+                    return 'call', 0
+                print(f"    [{player['name']} has {hand_name}, folding (bad odds)]")
+                return 'fold', 0
+
+        elif effective_strength > 0.2:
+            # Mediocre hand - call small bets, fold to big ones
+            if pot_odds < 0.25:
+                print(f"    [{player['name']} has {hand_name}, calling small bet]")
+                return 'call', 0
+            elif call_profitable and random.random() < 0.5:
+                print(f"    [{player['name']} has {hand_name}, calling]")
+                return 'call', 0
+            else:
+                print(f"    [{player['name']} has {hand_name}, folding]")
+                return 'fold', 0
+        else:
+            # Weak hand - usually fold
+            if pot_odds < 0.15 and random.random() < 0.3:
+                # Cheap call, might get lucky
+                print(f"    [{player['name']} has {hand_name}, calling cheap]")
+                return 'call', 0
+            print(f"    [{player['name']} has {hand_name}, folding]")
+            return 'fold', 0
+
+def process_bot_turn():
+    """Check if current player is a bot and process their turn."""
+    global game
+
+    if not game or not game.game_started:
+        return
+
+    if game.phase == 'showdown' or game.round_complete:
+        return
+
+    if game.current_player >= len(game.players):
+        return
+
+    current_player = game.players[game.current_player]
+
+    if not current_player.get('is_bot', False):
+        return
+
+    if current_player.get('folded', False) or current_player.get('is_all_in', False):
+        return
+
+    # Get game state for decision making
+    game_state = {
+        'current_bet': game.current_bet,
+        'pot': game.pot,
+        'phase': game.phase
+    }
+
+    # Get wild rank for hand evaluation
+    wild_rank = getattr(game, 'current_wild_rank', 'Q')
+
+    # Determine bot action
+    action, amount = get_bot_action(current_player, game_state, wild_rank)
+
+    print(f"[BOT] {current_player['name']} decides to {action}" + (f" ${amount}" if amount else ""))
+
+    # Execute the action after a short delay (makes it feel more natural)
+    def execute_bot_action():
+        success, message = game.player_action(action, amount)
+        if success:
+            broadcast_game_state()
+
+            # Check if hand is over
+            active_players = game.get_active_players()
+            if len(active_players) == 1 or game.phase == 'showdown':
+                handle_determine_winner()
+            elif game.round_complete and game.phase != 'showdown':
+                handle_advance_phase()
+            else:
+                # Check if next player is also a bot
+                process_bot_turn()
+        else:
+            print(f"[BOT] {current_player['name']} action failed: {message}")
+
+    # Delay bot action by 1-2 seconds for realism
+    delay = random.uniform(1.0, 2.0)
+    timer = threading.Timer(delay, execute_bot_action)
+    timer.start()
 
 # =============================================================================
 # WEBSOCKET EVENTS
@@ -1245,6 +1528,9 @@ def handle_start_game():
     broadcast_game_state()
     socketio.emit('game_locked', {'message': 'Game has started! No more players can join.'}, room='poker_game')
 
+    # Check if first player is a bot
+    process_bot_turn()
+
 @socketio.on('new_hand')
 def handle_new_hand():
     """Handle dealing a new hand - only dealer can do this."""
@@ -1261,6 +1547,9 @@ def handle_new_hand():
 
     game.new_hand()
     broadcast_game_state()
+
+    # Check if first player is a bot
+    process_bot_turn()
 
 @socketio.on('reset_game')
 def handle_reset_game():
@@ -1368,6 +1657,9 @@ def handle_player_action(data):
             handle_determine_winner()
         elif game.round_complete and game.phase != 'showdown':
             handle_advance_phase()
+        else:
+            # Check if next player is a bot
+            process_bot_turn()
 
 @socketio.on('advance_phase')
 def handle_advance_phase():
@@ -1377,6 +1669,9 @@ def handle_advance_phase():
 
     if game.phase == 'showdown':
         handle_determine_winner()
+    else:
+        # Check if first player in new phase is a bot
+        process_bot_turn()
 
 @socketio.on('determine_winner')
 def handle_determine_winner():
