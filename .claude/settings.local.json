@@ -14,7 +14,9 @@
       "Bash(taskkill:*)",
       "Bash(tasklist:*)",
       "Bash(ping:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(start http://127.0.0.1:5000)",
+      "Bash(git add:*)"
     ]
   }
 }

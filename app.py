@@ -8,6 +8,7 @@ from flask import Flask, render_template_string, jsonify, request, session
 from flask_socketio import SocketIO, emit, join_room
 from itertools import combinations
 from collections import Counter
+
 import random
 import secrets
 import os
@@ -477,6 +478,8 @@ class BasePokerGame:
                 player['is_all_in'] = True
         
         elif action == 'raise':
+            if amount is None:
+                amount = self.current_bet * 2  # Default to min raise
             if amount < self.current_bet * 2 and amount < player['chips'] + player['current_bet']:
                 return False, f"Minimum raise is {self.current_bet * 2}"
             
@@ -554,6 +557,8 @@ class BasePokerGame:
             # Everyone else folded
             winner = active[0]
             winner['chips'] += self.pot
+            # Allow new players to join after hand completes
+            self.game_started = False
             return [{'player': winner, 'amount': self.pot, 'hand': None}]
         
         # Compare hands
@@ -591,7 +596,10 @@ class BasePokerGame:
                 'amount': amount,
                 'hand': player['hand_result']['name']
             })
-        
+
+        # Allow new players to join after hand completes
+        self.game_started = False
+
         return results
     
     def ai_action(self):
@@ -1124,7 +1132,7 @@ class StudFollowQueenGame(BasePokerGame):
 
 # Global game instance
 # Start with Follow the Queen for testing
-game = StudFollowQueenGame(num_players=8, starting_chips=1000, ante_amount=5, bring_in_amount=10)
+game = StudFollowQueenGame(num_players=8, starting_chips=10.00, ante_amount=0.05, bring_in_amount=0.10)
 
 # Available player names
 PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4']
@@ -1288,10 +1296,11 @@ def get_bot_action(player, game_state, wild_rank='Q'):
         # Can check for free
         if effective_strength > 0.6:
             # Strong hand - bet for value
-            bet_size = int(pot * (0.5 + effective_strength * 0.5))
-            bet_amount = min(chips, max(10, bet_size))
+            bet_size = pot * (0.5 + effective_strength * 0.5)
+            bet_amount = min(chips, max(0.10, bet_size))
+            bet_amount = round(bet_amount, 2)
             if random.random() < 0.7:
-                print(f"    [{player['name']} has {hand_name}, betting ${bet_amount}]")
+                print(f"    [{player['name']} has {hand_name}, betting ${bet_amount:.2f}]")
                 return 'bet', bet_amount
             else:
                 # Slow play sometimes
@@ -1300,8 +1309,9 @@ def get_bot_action(player, game_state, wild_rank='Q'):
         elif effective_strength > 0.35:
             # Medium hand - sometimes bet, usually check
             if random.random() < 0.3:
-                bet_amount = min(chips, max(10, pot // 3))
-                print(f"    [{player['name']} has {hand_name}, probing with ${bet_amount}]")
+                bet_amount = min(chips, max(0.10, pot / 3))
+                bet_amount = round(bet_amount, 2)
+                print(f"    [{player['name']} has {hand_name}, probing with ${bet_amount:.2f}]")
                 return 'bet', bet_amount
             print(f"    [{player['name']} has {hand_name}, checking]")
             return 'check', 0
@@ -1318,8 +1328,9 @@ def get_bot_action(player, game_state, wild_rank='Q'):
         if effective_strength > 0.65:
             # Very strong hand - raise!
             if random.random() < 0.6:
-                raise_amount = min(chips, to_call + int(pot * 0.75))
-                print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount}]")
+                raise_amount = min(chips, to_call + pot * 0.75)
+                raise_amount = round(raise_amount, 2)
+                print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount:.2f}]")
                 return 'raise', raise_amount
             print(f"    [{player['name']} has {hand_name}, calling]")
             return 'call', 0
@@ -1328,10 +1339,11 @@ def get_bot_action(player, game_state, wild_rank='Q'):
             # Good hand - usually call, sometimes raise
             if call_profitable or pot_odds < 0.3:
                 if random.random() < 0.2 and effective_strength > 0.5:
-                    raise_amount = min(chips, to_call + int(pot * 0.5))
-                    print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount}]")
+                    raise_amount = min(chips, to_call + pot * 0.5)
+                    raise_amount = round(raise_amount, 2)
+                    print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount:.2f}]")
                     return 'raise', raise_amount
-                print(f"    [{player['name']} has {hand_name}, calling ${to_call}]")
+                print(f"    [{player['name']} has {hand_name}, calling ${to_call:.2f}]")
                 return 'call', 0
             else:
                 # Pot odds not good enough
@@ -1489,16 +1501,16 @@ def handle_new_game(data):
     if game_mode == 'stud_follow_queen':
         game = StudFollowQueenGame(
             num_players=num_players,
-            starting_chips=1000,
-            ante_amount=5,
-            bring_in_amount=10
+            starting_chips=10.00,
+            ante_amount=0.05,
+            bring_in_amount=0.10
         )
     else:  # Default to Hold'em
         game = HoldemGame(
             num_players=num_players,
-            starting_chips=1000,
-            small_blind=10,
-            big_blind=20
+            starting_chips=10.00,
+            small_blind=0.05,
+            big_blind=0.10
         )
 
     # Re-add existing players to the new game
@@ -1553,10 +1565,10 @@ def handle_new_hand():
 
 @socketio.on('reset_game')
 def handle_reset_game():
-    """Reset the entire game - only Michael H can do this. Restarts the server."""
+    """Reset the entire game - only Michael H can do this. Hard server restart."""
     global game, taken_names
 
-    player_id = game.get_player_by_session(request.sid)
+    player_id = game.get_player_by_session(request.sid) if game else None
 
     # Find the player and check if they are "Michael H"
     if player_id is None:
@@ -1569,20 +1581,27 @@ def handle_reset_game():
         return
 
     # Notify all clients that server is restarting
-    socketio.emit('server_restart', {'message': 'Server is restarting... Please wait and refresh.'}, room='poker_game')
+    socketio.emit('server_restart', {'message': 'Game reset by Michael H. Server restarting...'}, room='poker_game')
 
     print("\n" + "=" * 50)
-    print("SERVER RESTART TRIGGERED BY MICHAEL H")
+    print("HARD RESET TRIGGERED BY MICHAEL H")
+    print("Clearing all game state and restarting server...")
     print("=" * 50 + "\n")
+
+    # Clear all game state
+    game = None
+    taken_names = {}
 
     # Give clients a moment to receive the message
     import time
-    time.sleep(0.5)
+    time.sleep(1)
 
-    # Restart the server by re-executing the script
+    # Hard restart the server by re-executing the script
     import sys
     import os
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    # Use __file__ instead of sys.argv to handle paths with spaces correctly
+    script_path = os.path.abspath(__file__)
+    os.execv(sys.executable, [sys.executable, script_path])
 
 @socketio.on('reveal_cards')
 def handle_reveal_cards():
@@ -2479,6 +2498,7 @@ HTML_TEMPLATE = '''
         <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none;">New Hand</button>
         <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="display: none; background: linear-gradient(145deg, #e74c3c, #c0392b);">🔄 Reset Game</button>
         <button class="btn btn-primary" onclick="toggleAlgorithmInfo()">📚 Shuffle Info</button>
+        <button class="btn btn-primary" onclick="toggleHandRankings()" style="background: linear-gradient(145deg, #9b59b6, #8e44ad);">🏆 Hand Rankings</button>
     </div>
     
     <div class="game-container">
@@ -2521,6 +2541,86 @@ HTML_TEMPLATE = '''
             <div class="info-section">
                 <h3>Mathematical Properties</h3>
                 <p><strong>Time Complexity:</strong> O(n) | <strong>Space:</strong> O(1) | <strong>Permutations:</strong> 52! = 8.07 × 10<sup>67</sup></p>
+            </div>
+        </div>
+
+        <!-- Hand Rankings Info -->
+        <div class="algorithm-info" id="handRankingsInfo">
+            <h2>🏆 Poker Hand Rankings</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">Ranked from lowest (1) to highest (11). Higher beats lower!</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+                <div class="info-section" style="border-left-color: #95a5a6;">
+                    <h3>1. High Card</h3>
+                    <p>No matching cards. Highest card plays.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♠</span> K<span style="color:red;">♥</span> 9<span style="color:red;">♦</span> 7<span style="color:black;">♣</span> 2<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #3498db;">
+                    <h3>2. One Pair</h3>
+                    <p>Two cards of the same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">♠</span> K<span style="color:red;">♥</span> 9<span style="color:red;">♦</span> 7<span style="color:black;">♣</span> 2<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #2ecc71;">
+                    <h3>3. Two Pair</h3>
+                    <p>Two different pairs.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">♠</span> K<span style="color:red;">♥</span> 9<span style="color:red;">♦</span> 9<span style="color:black;">♣</span> 2<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #f39c12;">
+                    <h3>4. Three of a Kind</h3>
+                    <p>Three cards of the same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">9<span style="color:black;">♠</span> 9<span style="color:red;">♥</span> 9<span style="color:red;">♦</span> K<span style="color:black;">♣</span> 2<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e74c3c;">
+                    <h3>5. Straight</h3>
+                    <p>Five consecutive ranks (any suits).</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">5<span style="color:black;">♠</span> 6<span style="color:red;">♥</span> 7<span style="color:red;">♦</span> 8<span style="color:black;">♣</span> 9<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #9b59b6;">
+                    <h3>6. Flush</h3>
+                    <p>Five cards of the same suit.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♠</span> K<span style="color:black;">♠</span> 9<span style="color:black;">♠</span> 7<span style="color:black;">♠</span> 2<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #1abc9c;">
+                    <h3>7. Full House</h3>
+                    <p>Three of a kind + a pair.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">9<span style="color:black;">♠</span> 9<span style="color:red;">♥</span> 9<span style="color:red;">♦</span> K<span style="color:black;">♣</span> K<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e67e22;">
+                    <h3>8. Four of a Kind</h3>
+                    <p>Four cards of the same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">9<span style="color:black;">♠</span> 9<span style="color:red;">♥</span> 9<span style="color:red;">♦</span> 9<span style="color:black;">♣</span> K<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #c0392b;">
+                    <h3>9. Straight Flush</h3>
+                    <p>Straight + flush combined.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">5<span style="color:black;">♠</span> 6<span style="color:black;">♠</span> 7<span style="color:black;">♠</span> 8<span style="color:black;">♠</span> 9<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #f1c40f;">
+                    <h3>10. Royal Flush</h3>
+                    <p>A-K-Q-J-10 all same suit. <strong>Rarest hand!</strong></p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♠</span> K<span style="color:black;">♠</span> Q<span style="color:black;">♠</span> J<span style="color:black;">♠</span> 10<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #ff69b4; background: rgba(255,105,180,0.1);">
+                    <h3>11. Five of a Kind 🃏</h3>
+                    <p><strong>Wild cards only!</strong> Five cards of same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">♠</span> K<span style="color:red;">♥</span> K<span style="color:red;">♦</span> K<span style="color:black;">♣</span> Q<span style="color:red;">♥</span><span style="color:#ff69b4;">(wild)</span></div>
+                    <p style="font-size: 0.85rem; color: #ff69b4; margin-top: 5px;">Queens are always wild in Follow the Queen!</p>
+                </div>
+            </div>
+
+            <div class="info-section" style="margin-top: 20px; background: rgba(255,215,0,0.1); border-left-color: #ffd700;">
+                <h3>🃏 Wild Cards in Follow the Queen</h3>
+                <p><strong>Queens are always wild.</strong> When a Queen is dealt face-up, the next face-up card's rank also becomes wild. Wild cards can substitute for ANY card to make the best hand!</p>
             </div>
         </div>
 
@@ -2680,7 +2780,7 @@ HTML_TEMPLATE = '''
             // Display winner info in the game status area (no modal)
             let winnerText = '';
             data.winners.forEach(w => {
-                winnerText += `${w.player.name} wins $${w.amount}`;
+                winnerText += `${w.player.name} wins $${formatMoney(w.amount)}`;
                 if (w.hand) {
                     winnerText += ` with ${w.hand}`;
                 }
@@ -2983,6 +3083,11 @@ HTML_TEMPLATE = '''
             return "No Hand";
         }
 
+        // Format money with 2 decimal places
+        function formatMoney(amount) {
+            return parseFloat(amount).toFixed(2);
+        }
+
         function renderStudTable(gameState) {
             try {
                 // Safety check for players array
@@ -3070,8 +3175,8 @@ HTML_TEMPLATE = '''
                                 ${player.name}
                                 ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                             </div>
-                            <div class="player-chips">$${player.chips}</div>
-                            ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${player.current_bet}</div>` : ''}
+                            <div class="player-chips">$${formatMoney(player.chips)}</div>
+                            ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${formatMoney(player.current_bet)}</div>` : ''}
                             ${statusHTML}
                             ${handResultHTML}
                         </div>
@@ -3101,7 +3206,7 @@ HTML_TEMPLATE = '''
             const studPotEl = document.getElementById('studPotAmount');
             const studPhaseEl = document.getElementById('studPhaseDisplay');
 
-            if (studPotEl) studPotEl.textContent = gameState.pot;
+            if (studPotEl) studPotEl.textContent = formatMoney(gameState.pot);
 
             if (studPhaseEl) {
                 const PHASE_NAMES = {
@@ -3131,7 +3236,7 @@ HTML_TEMPLATE = '''
             const potEl = document.getElementById('potAmount');
             const phaseEl = document.getElementById('phaseDisplay');
 
-            if (potEl) potEl.textContent = gameState.pot;
+            if (potEl) potEl.textContent = formatMoney(gameState.pot);
 
             if (phaseEl) {
                 const PHASE_NAMES = {
@@ -3198,8 +3303,8 @@ HTML_TEMPLATE = '''
                             ${player.name}
                             ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                         </div>
-                        <div class="player-chips">$${player.chips}</div>
-                        ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${player.current_bet}</div>` : ''}
+                        <div class="player-chips">$${formatMoney(player.chips)}</div>
+                        ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${formatMoney(player.current_bet)}</div>` : ''}
                         <div class="player-cards">
                             ${cardsHTML}
                         </div>
@@ -3308,6 +3413,17 @@ HTML_TEMPLATE = '''
 
         function toggleAlgorithmInfo() {
             const info = document.getElementById('algorithmInfo');
+            const handRankings = document.getElementById('handRankingsInfo');
+            // Hide hand rankings when showing algorithm info
+            if (handRankings) handRankings.style.display = 'none';
+            info.style.display = info.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function toggleHandRankings() {
+            const info = document.getElementById('handRankingsInfo');
+            const algorithmInfo = document.getElementById('algorithmInfo');
+            // Hide algorithm info when showing hand rankings
+            if (algorithmInfo) algorithmInfo.style.display = 'none';
             info.style.display = info.style.display === 'none' ? 'block' : 'none';
         }
     </script>
