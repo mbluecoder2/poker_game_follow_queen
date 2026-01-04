@@ -1135,7 +1135,7 @@ class StudFollowQueenGame(BasePokerGame):
 game = StudFollowQueenGame(num_players=8, starting_chips=10.00, ante_amount=0.05, bring_in_amount=0.10)
 
 # Available player names
-PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4']
+PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4', 'Bot 5']
 taken_names = {}  # Maps session_id to player_name
 
 def broadcast_name_availability():
