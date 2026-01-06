@@ -1944,6 +1944,11 @@ HTML_TEMPLATE = '''
         .card:hover {
             transform: translateY(-5px);
         }
+
+        .card.wild {
+            border: 5px solid #ffd700;
+            box-shadow: 0 0 12px rgba(255, 215, 0, 0.7), 0 3px 6px rgba(0,0,0,0.3);
+        }
         
         .card.back {
             background: linear-gradient(145deg, #1e3d59, #17435e);
@@ -2221,7 +2226,33 @@ HTML_TEMPLATE = '''
             font-size: 1.2rem;
             margin: 15px 0;
         }
-        
+
+        .winner-entry {
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .winner-name {
+            font-size: 1.8rem;
+            color: #ffd700;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .winner-amount {
+            font-size: 1.3rem;
+            color: #90EE90;
+            margin-bottom: 8px;
+        }
+
+        .winner-hand {
+            font-size: 1.5rem;
+            color: #fff;
+            font-style: italic;
+        }
+
         /* Controls Bar */
         .controls-bar {
             display: flex;
@@ -2731,8 +2762,8 @@ HTML_TEMPLATE = '''
         <div class="winner-content">
             <h2>🏆 Winner!</h2>
             <div class="winner-details" id="winnerDetails"></div>
-            <button class="btn btn-primary" id="winnerCloseBtn" onclick="closeWinnerModal()" disabled>
-                Wait <span id="winnerCountdown">16</span>s...
+            <button class="btn btn-primary" id="winnerCloseBtn" onclick="closeWinnerModal()">
+                Continue
             </button>
         </div>
     </div>
@@ -2822,17 +2853,28 @@ HTML_TEMPLATE = '''
         });
 
         socket.on('winners', (data) => {
-            // Display winner info in the game status area (no modal)
-            let winnerText = '';
+            // Build winner display HTML
+            let winnerHTML = '';
             data.winners.forEach(w => {
-                winnerText += `${w.player.name} wins ${formatMoney(w.amount)} tokens`;
-                if (w.hand) {
-                    winnerText += ` with ${w.hand}`;
-                }
-                winnerText += '. ';
+                winnerHTML += `<div class="winner-entry">
+                    <div class="winner-name">${w.player.name}</div>
+                    <div class="winner-amount">Wins ${formatMoney(w.amount)} tokens ($${tokensToDollars(w.amount)})</div>
+                    ${w.hand ? `<div class="winner-hand">${w.hand}</div>` : ''}
+                </div>`;
             });
 
-            // Update status message with winner info
+            // Show the winner modal
+            const winnerDetails = document.getElementById('winnerDetails');
+            const winnerModal = document.getElementById('winnerModal');
+            if (winnerDetails && winnerModal) {
+                winnerDetails.innerHTML = winnerHTML;
+                winnerModal.style.display = 'flex';
+            }
+
+            // Also update status message
+            let winnerText = data.winners.map(w =>
+                `${w.player.name} wins ${formatMoney(w.amount)} tokens${w.hand ? ` with ${w.hand}` : ''}`
+            ).join('. ');
             const statusEl = document.getElementById('gameStatus');
             if (statusEl) {
                 statusEl.innerHTML = `<strong style="color: #ffd700; font-size: 1.2rem;">🏆 ${winnerText}</strong><br><em>Click your down cards to reveal them to other players.</em>`;
@@ -3004,8 +3046,12 @@ HTML_TEMPLATE = '''
             if (!card || card.suit === 'back') {
                 return `<div class="card back ${extraClass}"></div>`;
             }
+            // Check if card is wild (Queens always wild, plus current wild rank)
+            const wildRank = gameState ? gameState.current_wild_rank : 'Q';
+            const isWild = card.rank === 'Q' || card.rank === wildRank;
+            const wildClass = isWild ? 'wild' : '';
             return `
-                <div class="card ${card.suit} ${extraClass}">
+                <div class="card ${card.suit} ${extraClass} ${wildClass}">
                     <div class="card-corner top">
                         <span class="card-rank">${card.rank}</span>
                         <span class="card-suit">${card.symbol}</span>
