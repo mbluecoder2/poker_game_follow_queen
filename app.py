@@ -5,7 +5,7 @@ For PythonAnywhere hosting
 """
 
 from flask import Flask, render_template_string, jsonify, request, session
-from flask_socketio import SocketIO, emit, join_room
+from flask_socketio import SocketIO, emit, join_room  # type: ignore[import-untyped]
 from itertools import combinations
 from collections import Counter
 
@@ -345,7 +345,7 @@ class WildCardEvaluator(HandEvaluator):
 class BasePokerGame:
     """Base class for poker game variants."""
 
-    PHASES = []  # Subclasses define their phases
+    PHASES: list[str] = []  # Subclasses define their phases
 
     def __init__(self, num_players=5, starting_chips=1000):
         self.num_players = num_players
@@ -1132,11 +1132,11 @@ class StudFollowQueenGame(BasePokerGame):
 
 # Global game instance
 # Start with Follow the Queen for testing
-game = StudFollowQueenGame(num_players=8, starting_chips=10.00, ante_amount=0.05, bring_in_amount=0.10)
+game = StudFollowQueenGame(num_players=8, starting_chips=1000, ante_amount=5, bring_in_amount=10)
 
 # Available player names
 PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4', 'Bot 5']
-taken_names = {}  # Maps session_id to player_name
+taken_names: dict[str, str] = {}  # Maps session_id to player_name
 
 def broadcast_name_availability():
     """Broadcast which names are available to all clients."""
@@ -1297,10 +1297,9 @@ def get_bot_action(player, game_state, wild_rank='Q'):
         if effective_strength > 0.6:
             # Strong hand - bet for value
             bet_size = pot * (0.5 + effective_strength * 0.5)
-            bet_amount = min(chips, max(0.10, bet_size))
-            bet_amount = round(bet_amount, 2)
+            bet_amount = int(min(chips, max(10, bet_size)))
             if random.random() < 0.7:
-                print(f"    [{player['name']} has {hand_name}, betting ${bet_amount:.2f}]")
+                print(f"    [{player['name']} has {hand_name}, betting {int(bet_amount)} tokens]")
                 return 'bet', bet_amount
             else:
                 # Slow play sometimes
@@ -1309,9 +1308,8 @@ def get_bot_action(player, game_state, wild_rank='Q'):
         elif effective_strength > 0.35:
             # Medium hand - sometimes bet, usually check
             if random.random() < 0.3:
-                bet_amount = min(chips, max(0.10, pot / 3))
-                bet_amount = round(bet_amount, 2)
-                print(f"    [{player['name']} has {hand_name}, probing with ${bet_amount:.2f}]")
+                bet_amount = int(min(chips, max(10, pot / 3)))
+                print(f"    [{player['name']} has {hand_name}, probing with {int(bet_amount)} tokens]")
                 return 'bet', bet_amount
             print(f"    [{player['name']} has {hand_name}, checking]")
             return 'check', 0
@@ -1328,9 +1326,8 @@ def get_bot_action(player, game_state, wild_rank='Q'):
         if effective_strength > 0.65:
             # Very strong hand - raise!
             if random.random() < 0.6:
-                raise_amount = min(chips, to_call + pot * 0.75)
-                raise_amount = round(raise_amount, 2)
-                print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount:.2f}]")
+                raise_amount = int(min(chips, to_call + pot * 0.75))
+                print(f"    [{player['name']} has {hand_name}, raising to {raise_amount} tokens]")
                 return 'raise', raise_amount
             print(f"    [{player['name']} has {hand_name}, calling]")
             return 'call', 0
@@ -1339,11 +1336,10 @@ def get_bot_action(player, game_state, wild_rank='Q'):
             # Good hand - usually call, sometimes raise
             if call_profitable or pot_odds < 0.3:
                 if random.random() < 0.2 and effective_strength > 0.5:
-                    raise_amount = min(chips, to_call + pot * 0.5)
-                    raise_amount = round(raise_amount, 2)
-                    print(f"    [{player['name']} has {hand_name}, raising to ${raise_amount:.2f}]")
+                    raise_amount = int(min(chips, to_call + pot * 0.5))
+                    print(f"    [{player['name']} has {hand_name}, raising to {raise_amount} tokens]")
                     return 'raise', raise_amount
-                print(f"    [{player['name']} has {hand_name}, calling ${to_call:.2f}]")
+                print(f"    [{player['name']} has {hand_name}, calling {int(to_call)} tokens]")
                 return 'call', 0
             else:
                 # Pot odds not good enough
@@ -1407,7 +1403,7 @@ def process_bot_turn():
     # Determine bot action
     action, amount = get_bot_action(current_player, game_state, wild_rank)
 
-    print(f"[BOT] {current_player['name']} decides to {action}" + (f" ${amount}" if amount else ""))
+    print(f"[BOT] {current_player['name']} decides to {action}" + (f" {int(amount)} tokens" if amount else ""))
 
     # Execute the action after a short delay (makes it feel more natural)
     def execute_bot_action():
@@ -1501,16 +1497,16 @@ def handle_new_game(data):
     if game_mode == 'stud_follow_queen':
         game = StudFollowQueenGame(
             num_players=num_players,
-            starting_chips=10.00,
-            ante_amount=0.05,
-            bring_in_amount=0.10
+            starting_chips=1000,
+            ante_amount=5,
+            bring_in_amount=10
         )
     else:  # Default to Hold'em
         game = HoldemGame(
             num_players=num_players,
-            starting_chips=10.00,
-            small_blind=0.05,
-            big_blind=0.10
+            starting_chips=1000,
+            small_blind=5,
+            big_blind=10
         )
 
     # Re-add existing players to the new game
@@ -2101,6 +2097,24 @@ HTML_TEMPLATE = '''
             color: #1a3555;
         }
 
+        .btn-bet-amount {
+            background: linear-gradient(145deg, #3498db, #2980b9);
+            color: white;
+            padding: 8px 12px;
+            min-width: 45px;
+            font-weight: bold;
+        }
+
+        .btn-bet-amount:hover {
+            background: linear-gradient(145deg, #5dade2, #3498db);
+        }
+
+        .bet-buttons {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
         /* Player Name Dropdown */
         #playerName {
             font-size: 1rem;
@@ -2638,7 +2652,7 @@ HTML_TEMPLATE = '''
         <div id="holdemTable">
             <div class="poker-table" id="pokerTable">
                 <div class="pot-display">
-                    <div class="pot-amount">Pot: $<span id="potAmount">0</span></div>
+                    <div class="pot-amount">Pot: <span id="potAmount">0</span> tokens</div>
                     <div class="phase-display">Phase: <span id="phaseDisplay">-</span></div>
                 </div>
 
@@ -2656,7 +2670,7 @@ HTML_TEMPLATE = '''
         <div id="studTable">
             <div class="poker-table">
                 <div class="pot-display">
-                    <div class="pot-amount">Pot: $<span id="studPotAmount">0</span></div>
+                    <div class="pot-amount">Pot: <span id="studPotAmount">0</span> tokens</div>
                     <div class="phase-display">Phase: <span id="studPhaseDisplay">-</span></div>
                 </div>
 
@@ -2674,7 +2688,14 @@ HTML_TEMPLATE = '''
                 <button class="btn btn-allin" onclick="playerAction('all-in')">All In</button>
             </div>
             <div class="raise-controls" id="raiseControls" style="display: none;">
-                <span>Raise to: $</span>
+                <div class="bet-buttons" style="margin-bottom: 8px;">
+                    <button class="btn btn-bet-amount" onclick="addToBet(5)">+5</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(10)">+10</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(25)">+25</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(50)">+50</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(100)">+100</button>
+                </div>
+                <span>Raise to:</span>
                 <input type="number" id="raiseAmount" class="raise-input" value="0">
                 <button class="btn btn-raise" onclick="playerAction('raise')">Confirm Raise</button>
                 <button class="btn" onclick="hideRaiseControls()">Cancel</button>
@@ -2780,7 +2801,7 @@ HTML_TEMPLATE = '''
             // Display winner info in the game status area (no modal)
             let winnerText = '';
             data.winners.forEach(w => {
-                winnerText += `${w.player.name} wins $${formatMoney(w.amount)}`;
+                winnerText += `${w.player.name} wins ${formatMoney(w.amount)} tokens`;
                 if (w.hand) {
                     winnerText += ` with ${w.hand}`;
                 }
@@ -3085,7 +3106,7 @@ HTML_TEMPLATE = '''
 
         // Format money with 2 decimal places
         function formatMoney(amount) {
-            return parseFloat(amount).toFixed(2);
+            return Math.floor(amount);
         }
 
         function renderStudTable(gameState) {
@@ -3175,8 +3196,8 @@ HTML_TEMPLATE = '''
                                 ${player.name}
                                 ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                             </div>
-                            <div class="player-chips">$${formatMoney(player.chips)}</div>
-                            ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${formatMoney(player.current_bet)}</div>` : ''}
+                            <div class="player-chips">${formatMoney(player.chips)} tokens</div>
+                            ${player.current_bet > 0 ? `<div class="player-bet">Bet: ${formatMoney(player.current_bet)}</div>` : ''}
                             ${statusHTML}
                             ${handResultHTML}
                         </div>
@@ -3379,7 +3400,7 @@ HTML_TEMPLATE = '''
             const toCall = gameState.current_bet - myPlayer.current_bet;
 
             if (toCall > 0) {
-                checkCallBtn.textContent = `Call $${toCall}`;
+                checkCallBtn.textContent = `Call ${toCall}`;
                 checkCallBtn.onclick = () => playerAction('call');
                 checkCallBtn.className = 'btn btn-call';
             } else {
@@ -3399,7 +3420,13 @@ HTML_TEMPLATE = '''
         function hideRaiseControls() {
             document.getElementById('raiseControls').style.display = 'none';
         }
-        
+
+        function addToBet(amount) {
+            const input = document.getElementById('raiseAmount');
+            const currentValue = parseInt(input.value) || 0;
+            input.value = currentValue + amount;
+        }
+
         function closeWinnerModal() {
             document.getElementById('winnerModal').style.display = 'none';
             document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
