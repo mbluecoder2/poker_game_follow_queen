@@ -1760,6 +1760,17 @@ HTML_TEMPLATE = '''
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             font-size: 2rem;
         }
+
+        .token-info {
+            color: #90EE90;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .dollar-equiv {
+            color: #90EE90;
+            font-size: 0.85em;
+        }
         
         .game-container {
             max-width: 1600px;
@@ -2473,6 +2484,7 @@ HTML_TEMPLATE = '''
 <body>
     <div class="header">
         <h1 id="gameTitle">🃏 Texas Hold'em Poker - Multiplayer</h1>
+        <div class="token-info">💰 100 tokens = $1.00</div>
     </div>
 
     <div id="joinSection" class="controls-bar" style="flex-direction: column; gap: 15px;">
@@ -2652,7 +2664,7 @@ HTML_TEMPLATE = '''
         <div id="holdemTable">
             <div class="poker-table" id="pokerTable">
                 <div class="pot-display">
-                    <div class="pot-amount">Pot: <span id="potAmount">0</span> tokens</div>
+                    <div class="pot-amount">Pot: <span id="potAmount">0</span> tokens <span class="dollar-equiv">($<span id="potDollars">0.00</span>)</span></div>
                     <div class="phase-display">Phase: <span id="phaseDisplay">-</span></div>
                 </div>
 
@@ -2670,7 +2682,7 @@ HTML_TEMPLATE = '''
         <div id="studTable">
             <div class="poker-table">
                 <div class="pot-display">
-                    <div class="pot-amount">Pot: <span id="studPotAmount">0</span> tokens</div>
+                    <div class="pot-amount">Pot: <span id="studPotAmount">0</span> tokens <span class="dollar-equiv">($<span id="studPotDollars">0.00</span>)</span></div>
                     <div class="phase-display">Phase: <span id="studPhaseDisplay">-</span></div>
                 </div>
 
@@ -3104,9 +3116,14 @@ HTML_TEMPLATE = '''
             return "No Hand";
         }
 
-        // Format money with 2 decimal places
+        // Format tokens as integer
         function formatMoney(amount) {
             return Math.floor(amount);
+        }
+
+        // Convert tokens to dollars (100 tokens = $1)
+        function tokensToDollars(tokens) {
+            return (tokens / 100).toFixed(2);
         }
 
         function renderStudTable(gameState) {
@@ -3196,7 +3213,7 @@ HTML_TEMPLATE = '''
                                 ${player.name}
                                 ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                             </div>
-                            <div class="player-chips">${formatMoney(player.chips)} tokens</div>
+                            <div class="player-chips">${formatMoney(player.chips)} tokens <span class="dollar-equiv">($${tokensToDollars(player.chips)})</span></div>
                             ${player.current_bet > 0 ? `<div class="player-bet">Bet: ${formatMoney(player.current_bet)}</div>` : ''}
                             ${statusHTML}
                             ${handResultHTML}
@@ -3228,6 +3245,8 @@ HTML_TEMPLATE = '''
             const studPhaseEl = document.getElementById('studPhaseDisplay');
 
             if (studPotEl) studPotEl.textContent = formatMoney(gameState.pot);
+            const studPotDollarsEl = document.getElementById('studPotDollars');
+            if (studPotDollarsEl) studPotDollarsEl.textContent = tokensToDollars(gameState.pot);
 
             if (studPhaseEl) {
                 const PHASE_NAMES = {
@@ -3258,6 +3277,8 @@ HTML_TEMPLATE = '''
             const phaseEl = document.getElementById('phaseDisplay');
 
             if (potEl) potEl.textContent = formatMoney(gameState.pot);
+            const potDollarsEl = document.getElementById('potDollars');
+            if (potDollarsEl) potDollarsEl.textContent = tokensToDollars(gameState.pot);
 
             if (phaseEl) {
                 const PHASE_NAMES = {
@@ -3324,8 +3345,8 @@ HTML_TEMPLATE = '''
                             ${player.name}
                             ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                         </div>
-                        <div class="player-chips">$${formatMoney(player.chips)}</div>
-                        ${player.current_bet > 0 ? `<div class="player-bet">Bet: $${formatMoney(player.current_bet)}</div>` : ''}
+                        <div class="player-chips">${formatMoney(player.chips)} tokens <span class="dollar-equiv">($${tokensToDollars(player.chips)})</span></div>
+                        ${player.current_bet > 0 ? `<div class="player-bet">Bet: ${formatMoney(player.current_bet)}</div>` : ''}
                         <div class="player-cards">
                             ${cardsHTML}
                         </div>
