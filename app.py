@@ -2126,6 +2126,17 @@ HTML_TEMPLATE = '''
             justify-content: center;
         }
 
+        .btn-clear-bet {
+            background: linear-gradient(145deg, #e74c3c, #c0392b);
+            color: white;
+            padding: 8px 12px;
+            font-weight: bold;
+        }
+
+        .btn-clear-bet:hover {
+            background: linear-gradient(145deg, #ec7063, #e74c3c);
+        }
+
         /* Player Name Dropdown */
         #playerName {
             font-size: 1rem;
@@ -2706,9 +2717,10 @@ HTML_TEMPLATE = '''
                     <button class="btn btn-bet-amount" onclick="addToBet(25)">+25</button>
                     <button class="btn btn-bet-amount" onclick="addToBet(50)">+50</button>
                     <button class="btn btn-bet-amount" onclick="addToBet(100)">+100</button>
+                    <button class="btn btn-clear-bet" onclick="clearBet()">Clear</button>
                 </div>
                 <span>Raise to:</span>
-                <input type="number" id="raiseAmount" class="raise-input" value="0">
+                <input type="number" id="raiseAmount" class="raise-input" value="0" min="0">
                 <button class="btn btn-raise" onclick="playerAction('raise')">Confirm Raise</button>
                 <button class="btn" onclick="hideRaiseControls()">Cancel</button>
             </div>
@@ -2920,7 +2932,8 @@ HTML_TEMPLATE = '''
         function playerAction(action) {
             let amount = 0;
             if (action === 'raise') {
-                amount = parseInt(document.getElementById('raiseAmount').value);
+                amount = parseInt(document.getElementById('raiseAmount').value) || 0;
+                if (amount < 0) amount = 0;
             }
 
             hideRaiseControls();
@@ -3445,7 +3458,12 @@ HTML_TEMPLATE = '''
         function addToBet(amount) {
             const input = document.getElementById('raiseAmount');
             const currentValue = parseInt(input.value) || 0;
-            input.value = currentValue + amount;
+            const newValue = currentValue + amount;
+            input.value = Math.max(0, newValue);
+        }
+
+        function clearBet() {
+            document.getElementById('raiseAmount').value = 0;
         }
 
         function closeWinnerModal() {
