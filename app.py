@@ -2551,10 +2551,10 @@ HTML_TEMPLATE = '''
 
             <label for="numPlayers" style="color: #ffd700; font-weight: bold;">Players:</label>
             <select id="numPlayers" class="btn" style="padding: 10px; background: rgba(255,255,255,0.9); color: #1a3555; cursor: pointer;">
-                <option value="2" selected>2 Players</option>
+                <option value="2">2 Players</option>
                 <option value="3">3 Players</option>
                 <option value="4">4 Players</option>
-                <option value="5">5 Players</option>
+                <option value="5" selected>5 Players</option>
                 <option value="6">6 Players</option>
                 <option value="7">7 Players</option>
                 <option value="8">8 Players</option>
