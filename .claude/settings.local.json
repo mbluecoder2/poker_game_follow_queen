@@ -16,7 +16,10 @@
       "Bash(ping:*)",
       "Bash(findstr:*)",
       "Bash(start http://127.0.0.1:5000)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(dir:*)"
     ]
   }
 }

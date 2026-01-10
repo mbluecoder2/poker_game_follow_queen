@@ -3123,56 +3123,118 @@ HTML_TEMPLATE = '''
 
             if (allCards.length < 2) return null;
 
-            // Count ranks and suits
+            // Count ranks and suits, track cards by rank
             const rankOrder = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
             const rankCounts = {};
+            const cardsByRank = {};
             const suitCounts = {};
-            let wildCount = 0;
+            const cardsBySuit = {};
+            const wildCards = [];
 
             allCards.forEach(card => {
                 // Check if this card is wild (Queen or the current wild rank)
                 const isWild = card.rank === 'Q' || (wildRank && card.rank === wildRank);
                 if (isWild) {
-                    wildCount++;
+                    wildCards.push(card);
                 } else {
                     rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1;
+                    if (!cardsByRank[card.rank]) cardsByRank[card.rank] = [];
+                    cardsByRank[card.rank].push(card);
                 }
                 suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
+                if (!cardsBySuit[card.suit]) cardsBySuit[card.suit] = [];
+                cardsBySuit[card.suit].push(card);
             });
 
-            // Get pairs, trips, quads
-            const counts = Object.values(rankCounts).sort((a, b) => b - a);
-            const maxOfKind = (counts[0] || 0) + wildCount;
-            const secondOfKind = counts[1] || 0;
+            const wildCount = wildCards.length;
+
+            // Find the rank with most cards
+            const sortedRanks = Object.keys(rankCounts).sort((a, b) => {
+                if (rankCounts[b] !== rankCounts[a]) return rankCounts[b] - rankCounts[a];
+                return rankOrder.indexOf(b) - rankOrder.indexOf(a);
+            });
+
+            const bestRank = sortedRanks[0];
+            const secondRank = sortedRanks[1];
+            const maxOfKind = (rankCounts[bestRank] || 0) + wildCount;
+            const secondOfKind = rankCounts[secondRank] || 0;
 
             // Check for flush (5+ of same suit)
-            const maxSuit = Math.max(...Object.values(suitCounts), 0);
-            const hasFlush = maxSuit >= 5;
+            const flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
+            const hasFlush = !!flushSuit;
+
+            // Helper to format result with cards
+            function result(name, cards) {
+                const cardsStr = cardsToShortNotation(cards);
+                return cardsStr ? `${name} (${cardsStr})` : name;
+            }
+
+            // Get hand cards for of-a-kind hands
+            function getOfAKindCards(rank, count) {
+                const cards = [...(cardsByRank[rank] || [])];
+                // Add wild cards to complete the hand
+                for (let i = 0; i < wildCards.length && cards.length < count; i++) {
+                    cards.push(wildCards[i]);
+                }
+                return cards;
+            }
 
             // Evaluate hand
-            if (maxOfKind >= 5) return "Five of a Kind!";
-            if (maxOfKind >= 4) return "Four of a Kind";
-            if (maxOfKind >= 3 && secondOfKind >= 2) return "Full House";
-            if (hasFlush) return "Flush";
-            if (maxOfKind >= 3) return "Three of a Kind";
-            if (maxOfKind >= 2 && secondOfKind >= 2) return "Two Pair";
-            if (maxOfKind >= 2) return "Pair";
-            if (wildCount > 0) return "Wild Card";
+            if (maxOfKind >= 5) {
+                return result("Five of a Kind!", getOfAKindCards(bestRank, 5));
+            }
+            if (maxOfKind >= 4) {
+                return result("Four of a Kind", getOfAKindCards(bestRank, 4));
+            }
+            if (maxOfKind >= 3 && secondOfKind >= 2) {
+                const tripCards = getOfAKindCards(bestRank, 3);
+                const pairCards = (cardsByRank[secondRank] || []).slice(0, 2);
+                return result("Full House", [...tripCards, ...pairCards]);
+            }
+            if (hasFlush) {
+                return result("Flush", cardsBySuit[flushSuit].slice(0, 5));
+            }
+            if (maxOfKind >= 3) {
+                return result("Three of a Kind", getOfAKindCards(bestRank, 3));
+            }
+            if (maxOfKind >= 2 && secondOfKind >= 2) {
+                const pair1 = getOfAKindCards(bestRank, 2);
+                const pair2 = (cardsByRank[secondRank] || []).slice(0, 2);
+                return result("Two Pair", [...pair1, ...pair2]);
+            }
+            if (maxOfKind >= 2) {
+                return result("Pair", getOfAKindCards(bestRank, 2));
+            }
+            if (wildCount > 0) {
+                return result("Wild Card", wildCards);
+            }
 
             // High card
-            const highRanks = Object.keys(rankCounts).sort((a, b) =>
-                rankOrder.indexOf(b) - rankOrder.indexOf(a)
-            );
-            if (highRanks.length > 0) {
-                const highCard = highRanks[0];
+            if (sortedRanks.length > 0) {
+                const highCard = sortedRanks[0];
                 const displayRank = highCard === 'A' ? 'Ace' :
                                    highCard === 'K' ? 'King' :
                                    highCard === 'Q' ? 'Queen' :
                                    highCard === 'J' ? 'Jack' : highCard;
-                return `${displayRank} High`;
+                return result(`${displayRank} High`, [cardsByRank[highCard][0]]);
             }
 
             return "No Hand";
+        }
+
+        // Format a card to 2-character notation (e.g., "A♥" for Ace of hearts)
+        function cardToShortNotation(card) {
+            if (!card || !card.rank || !card.suit) return '??';
+            const rankChar = card.rank === '10' ? 'T' : card.rank;
+            const suitSymbols = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
+            const suitChar = suitSymbols[card.suit] || card.suit.charAt(0);
+            return rankChar + suitChar;
+        }
+
+        // Format an array of cards to 2-character notation string
+        function cardsToShortNotation(cards) {
+            if (!cards || !Array.isArray(cards) || cards.length === 0) return '';
+            return cards.map(cardToShortNotation).join(' ');
         }
 
         // Format tokens as integer
@@ -3238,7 +3300,8 @@ HTML_TEMPLATE = '''
                 // Hand result
                 let handResultHTML = '';
                 if (player.hand_result && gameState.phase === 'showdown') {
-                    handResultHTML = `<div class="hand-result">${player.hand_result.name}</div>`;
+                    const cardsStr = player.hand_result.best_cards ? cardsToShortNotation(player.hand_result.best_cards) : '';
+                    handResultHTML = `<div class="hand-result">${player.hand_result.name}${cardsStr ? ' (' + cardsStr + ')' : ''}</div>`;
                 }
 
                 // Check if this player's down cards are visible (not hidden)
@@ -3393,7 +3456,8 @@ HTML_TEMPLATE = '''
 
                 let handResultHTML = '';
                 if (player.hand_result && gameState.phase === 'showdown') {
-                    handResultHTML = `<div class="hand-result">${player.hand_result.name}</div>`;
+                    const cardsStr = player.hand_result.best_cards ? cardsToShortNotation(player.hand_result.best_cards) : '';
+                    handResultHTML = `<div class="hand-result">${player.hand_result.name}${cardsStr ? ' (' + cardsStr + ')' : ''}</div>`;
                 }
 
                 const cardsHTML = player.hole_cards ? player.hole_cards.map(c => createCardHTML(c)).join('') : '';
