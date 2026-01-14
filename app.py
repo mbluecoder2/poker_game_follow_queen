@@ -1,8 +1,11 @@
 """
 Texas Hold'em Poker Game
 A Flask web application with dealing, hand evaluation, and betting mechanics
-For PythonAnywhere hosting
+Supports deployment on Render.com with WebSocket support
 """
+
+import eventlet
+eventlet.monkey_patch()
 
 from flask import Flask, render_template_string, jsonify, request, session
 from flask_socketio import SocketIO, emit, join_room  # type: ignore[import-untyped]
@@ -14,8 +17,8 @@ import secrets
 import os
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
-socketio = SocketIO(app, cors_allowed_origins="*")
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # =============================================================================
 # CARD AND DECK MANAGEMENT
@@ -3686,4 +3689,6 @@ def api_shuffle():
     return jsonify(shuffled)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5000)
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, debug=debug_mode, host='0.0.0.0', port=port)
