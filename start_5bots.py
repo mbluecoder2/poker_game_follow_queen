@@ -1,4 +1,4 @@
-"""Start a game with all 5 bots."""
+""" Start a game with all 5 bots. """
 import socketio
 import time
 
