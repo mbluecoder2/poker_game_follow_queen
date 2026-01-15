@@ -22,7 +22,8 @@
       "Bash(dir:*)",
       "Bash(git -C \"M:\\\\Projects\\\\poker_game_follow_queen\" log --oneline -20)",
       "Bash(cd:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(git push:*)"
     ]
   }
 }
