@@ -199,7 +199,7 @@ class HandEvaluator:
 
 
 class WildCardEvaluator(HandEvaluator):
-    """Evaluates poker hands with wild cards."""
+    """ Evaluates poker hands with wild cards. """
 
     @staticmethod
     def expand_wild_cards(cards, wild_ranks):
