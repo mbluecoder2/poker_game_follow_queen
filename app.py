@@ -346,7 +346,7 @@ class WildCardEvaluator(HandEvaluator):
 # =============================================================================
 
 class BasePokerGame:
-    """Base class for poker game variants."""
+    """ Base class for poker game variants. """
 
     PHASES: list[str] = []  # Subclasses define their phases
 
