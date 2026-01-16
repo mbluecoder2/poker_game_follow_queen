@@ -355,6 +355,223 @@ class WildCardEvaluator(HandEvaluator):
 
 
 # =============================================================================
+# LOW HAND EVALUATION (FOR HI-LO GAMES)
+# =============================================================================
+
+class LowHandEvaluator:
+    """
+    Evaluates poker hands for low (8-or-better qualifying).
+
+    Rules:
+    - Aces count as low (A = 1)
+    - Straights and flushes don't count against you
+    - No pairs allowed - all 5 cards must be different ranks
+    - All 5 cards must be 8 or lower to qualify
+    - Best low is A-2-3-4-5 ("The Wheel")
+    - Hands are compared from highest card down
+    """
+
+    # Map ranks to low values (A=1, 2=2, ..., 8=8)
+    LOW_RANK_VALUES = {
+        'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+        '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13
+    }
+
+    @staticmethod
+    def card_low_value(card):
+        """Get low value of a card (A=1, 2=2, etc.)."""
+        return LowHandEvaluator.LOW_RANK_VALUES.get(card['rank'], 99)
+
+    @staticmethod
+    def evaluate_low(cards):
+        """
+        Evaluate a 5-card hand for low.
+
+        Returns:
+            (qualifies, low_values, display_name) where:
+            - qualifies: True if hand qualifies for low (8-or-better, no pairs)
+            - low_values: Tuple of card values sorted high to low for comparison
+                          Lower tuple = better low hand
+            - display_name: String description like "8-6-4-3-A low"
+        """
+        if len(cards) != 5:
+            return (False, (99, 99, 99, 99, 99), "No Low")
+
+        # Get low values for all cards
+        low_values = [LowHandEvaluator.card_low_value(c) for c in cards]
+
+        # Check for pairs (all cards must be different ranks)
+        ranks = [c['rank'] for c in cards]
+        if len(set(ranks)) != 5:
+            return (False, (99, 99, 99, 99, 99), "No Low (paired)")
+
+        # Check 8-or-better qualifier
+        if max(low_values) > 8:
+            return (False, (99, 99, 99, 99, 99), "No Low (9+ card)")
+
+        # Sort values from high to low for comparison
+        sorted_values = tuple(sorted(low_values, reverse=True))
+
+        # Build display name
+        rank_names = {1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8'}
+        display = '-'.join(rank_names[v] for v in sorted_values)
+
+        # Special names for common lows
+        if sorted_values == (5, 4, 3, 2, 1):
+            display_name = "The Wheel (A-2-3-4-5)"
+        elif sorted_values == (6, 4, 3, 2, 1):
+            display_name = "Six-Four Low"
+        elif sorted_values == (6, 5, 3, 2, 1) or sorted_values == (6, 5, 4, 2, 1) or sorted_values == (6, 5, 4, 3, 1):
+            display_name = f"Six Low ({display})"
+        elif sorted_values[0] == 7:
+            display_name = f"Seven Low ({display})"
+        elif sorted_values[0] == 8:
+            display_name = f"Eight Low ({display})"
+        else:
+            display_name = f"{display} Low"
+
+        return (True, sorted_values, display_name)
+
+    @staticmethod
+    def best_low_hand(all_cards):
+        """
+        Find the best qualifying low hand from available cards.
+
+        Args:
+            all_cards: List of cards (typically 7 in stud)
+
+        Returns:
+            (qualifies, low_values, display_name, best_5_cards) or
+            (False, (99,99,99,99,99), "No Low", None) if no qualifying low
+        """
+        best_low = None
+        best_cards = None
+
+        for combo in combinations(all_cards, 5):
+            combo_list = list(combo)
+            qualifies, low_values, display_name = LowHandEvaluator.evaluate_low(combo_list)
+
+            if qualifies:
+                if best_low is None or low_values < best_low[1]:
+                    best_low = (qualifies, low_values, display_name)
+                    best_cards = combo_list
+
+        if best_low is None:
+            return (False, (99, 99, 99, 99, 99), "No Low", None)
+
+        return (*best_low, best_cards)
+
+    @staticmethod
+    def best_low_hand_with_wilds(all_cards, wild_ranks):
+        """
+        Find the best qualifying low hand with wild cards.
+        Wild cards can substitute for any card to make a low.
+
+        Args:
+            all_cards: List of cards (typically 7 in stud)
+            wild_ranks: List of ranks that are wild (e.g., ['Q', '7'])
+
+        Returns:
+            (qualifies, low_values, display_name, best_5_cards)
+        """
+        if not wild_ranks:
+            return LowHandEvaluator.best_low_hand(all_cards)
+
+        best_low = None
+        best_cards = None
+
+        for combo in combinations(all_cards, 5):
+            combo_list = list(combo)
+
+            # Count wild cards in this combo
+            wild_indices = [i for i, c in enumerate(combo_list) if c['rank'] in wild_ranks]
+            non_wild_cards = [c for c in combo_list if c['rank'] not in wild_ranks]
+
+            if not wild_indices:
+                # No wilds, evaluate normally
+                qualifies, low_values, display_name = LowHandEvaluator.evaluate_low(combo_list)
+                if qualifies and (best_low is None or low_values < best_low[1]):
+                    best_low = (qualifies, low_values, display_name)
+                    best_cards = combo_list
+            else:
+                # Try to make best low with wilds
+                # Get ranks already used by non-wild cards
+                used_ranks = set(c['rank'] for c in non_wild_cards)
+                non_wild_values = [LowHandEvaluator.card_low_value(c) for c in non_wild_cards]
+
+                # Check if non-wild cards already disqualify (9+ card)
+                if any(v > 8 for v in non_wild_values):
+                    continue
+
+                # Check for pairs among non-wild cards
+                if len(used_ranks) != len(non_wild_cards):
+                    continue
+
+                # Find best available low ranks for wild cards
+                # Ranks A-8 that aren't already used, sorted lowest first
+                available_low_ranks = [r for r in ['A', '2', '3', '4', '5', '6', '7', '8']
+                                       if r not in used_ranks]
+
+                if len(available_low_ranks) < len(wild_indices):
+                    # Not enough unique low ranks available
+                    continue
+
+                # Use the lowest available ranks for wilds
+                wild_values = [LowHandEvaluator.LOW_RANK_VALUES[r] for r in available_low_ranks[:len(wild_indices)]]
+
+                # Combine and sort
+                all_values = non_wild_values + wild_values
+                sorted_values = tuple(sorted(all_values, reverse=True))
+
+                # Build display name
+                rank_names = {1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8'}
+                display = '-'.join(rank_names[v] for v in sorted_values)
+
+                if sorted_values == (5, 4, 3, 2, 1):
+                    display_name = "The Wheel (A-2-3-4-5)"
+                elif sorted_values[0] <= 8:
+                    high_card = rank_names[sorted_values[0]]
+                    display_name = f"{high_card} Low ({display})"
+                else:
+                    display_name = f"{display} Low"
+
+                if best_low is None or sorted_values < best_low[1]:
+                    best_low = (True, sorted_values, display_name)
+                    best_cards = combo_list
+
+        if best_low is None:
+            return (False, (99, 99, 99, 99, 99), "No Low", None)
+
+        return (*best_low, best_cards)
+
+    @staticmethod
+    def compare_low_hands(low1, low2):
+        """
+        Compare two low hands.
+
+        Args:
+            low1, low2: Tuples of (qualifies, low_values, ...)
+
+        Returns:
+            1 if low1 is better, -1 if low2 is better, 0 for tie
+        """
+        # Non-qualifying hands lose to qualifying hands
+        if low1[0] and not low2[0]:
+            return 1
+        if low2[0] and not low1[0]:
+            return -1
+        if not low1[0] and not low2[0]:
+            return 0  # Both don't qualify
+
+        # Both qualify - lower tuple wins
+        if low1[1] < low2[1]:
+            return 1
+        elif low2[1] < low1[1]:
+            return -1
+        return 0
+
+
+# =============================================================================
 # GAME STATE MANAGEMENT
 # =============================================================================
 
@@ -864,11 +1081,12 @@ class StudFollowQueenGame(BasePokerGame):
     PHASES = ['third_street', 'fourth_street', 'fifth_street',
               'sixth_street', 'seventh_street', 'showdown']
 
-    def __init__(self, num_players=5, starting_chips=1000, ante_amount=5, bring_in_amount=10):
+    def __init__(self, num_players=5, starting_chips=1000, ante_amount=5, bring_in_amount=10, hi_lo=False):
         self.ante_amount = ante_amount
         self.bring_in_amount = bring_in_amount
         self.current_wild_rank = 'Q'  # Always starts with Queens only
         self.wild_card_history = []
+        self.hi_lo = hi_lo  # Hi-Lo mode: split pot between high and low hands
         super().__init__(num_players, starting_chips)
 
     def reset_game(self):
@@ -876,6 +1094,7 @@ class StudFollowQueenGame(BasePokerGame):
         super().reset_game()
         self.current_wild_rank = 'Q'
         self.wild_card_history = []
+        # hi_lo setting persists across hands
 
     def add_player(self, session_id, player_name):
         """Add a new player with Stud-specific card fields."""
@@ -1072,7 +1291,7 @@ class StudFollowQueenGame(BasePokerGame):
             # Combine all 7 cards
             all_cards = player['down_cards'] + player['up_cards']
 
-            # Evaluate best hand with wild cards
+            # Evaluate best HIGH hand with wild cards
             best = WildCardEvaluator.best_hand_with_wilds(all_cards, wild_ranks)
 
             player['hand_result'] = {
@@ -1082,6 +1301,156 @@ class StudFollowQueenGame(BasePokerGame):
                 'best_cards': best[3] if len(best) > 3 else [],
                 'wild_ranks': wild_ranks
             }
+
+            # Evaluate LOW hand if in Hi-Lo mode
+            if self.hi_lo:
+                low_result = LowHandEvaluator.best_low_hand_with_wilds(all_cards, wild_ranks)
+                player['low_result'] = {
+                    'qualifies': low_result[0],
+                    'low_values': low_result[1],
+                    'name': low_result[2],
+                    'best_cards': low_result[3] if len(low_result) > 3 else []
+                }
+
+    def determine_winners(self):
+        """
+        Determine winners and distribute pot.
+        In Hi-Lo mode, split pot between best high and best qualifying low.
+        If no one qualifies for low, high hand wins entire pot.
+        """
+        active = self.get_active_players()
+
+        if len(active) == 1:
+            # Everyone else folded
+            winner = active[0]
+            winner['chips'] += self.pot
+            self.game_started = False
+            return [{'player': winner, 'amount': self.pot, 'hand': None, 'win_type': 'fold'}]
+
+        # Evaluate all hands
+        self._evaluate_hands()
+
+        # Find best HIGH hand(s)
+        best_high_players = []
+        best_high_hand = None
+
+        for player in active:
+            hr = player['hand_result']
+            player_hand = (hr['rank'], hr['tiebreakers'])
+
+            if best_high_hand is None:
+                best_high_hand = player_hand
+                best_high_players = [player]
+            else:
+                comparison = HandEvaluator.compare_hands(player_hand, best_high_hand)
+                if comparison > 0:
+                    best_high_hand = player_hand
+                    best_high_players = [player]
+                elif comparison == 0:
+                    best_high_players.append(player)
+
+        # If not Hi-Lo mode, high hand wins entire pot
+        if not self.hi_lo:
+            share = self.pot // len(best_high_players)
+            remainder = self.pot % len(best_high_players)
+
+            results = []
+            for i, player in enumerate(best_high_players):
+                amount = share + (1 if i < remainder else 0)
+                player['chips'] += amount
+                results.append({
+                    'player': player,
+                    'amount': amount,
+                    'hand': player['hand_result']['name'],
+                    'win_type': 'high'
+                })
+
+            self.game_started = False
+            return results
+
+        # Hi-Lo mode: Find best qualifying LOW hand(s)
+        best_low_players = []
+        best_low_hand = None
+
+        for player in active:
+            lr = player.get('low_result')
+            if lr and lr['qualifies']:
+                player_low = (lr['qualifies'], lr['low_values'])
+
+                if best_low_hand is None:
+                    best_low_hand = player_low
+                    best_low_players = [player]
+                else:
+                    comparison = LowHandEvaluator.compare_low_hands(player_low, best_low_hand)
+                    if comparison > 0:
+                        best_low_hand = player_low
+                        best_low_players = [player]
+                    elif comparison == 0:
+                        best_low_players.append(player)
+
+        results = []
+
+        if not best_low_players:
+            # No qualifying low - high hand scoops entire pot
+            share = self.pot // len(best_high_players)
+            remainder = self.pot % len(best_high_players)
+
+            for i, player in enumerate(best_high_players):
+                amount = share + (1 if i < remainder else 0)
+                player['chips'] += amount
+                results.append({
+                    'player': player,
+                    'amount': amount,
+                    'hand': player['hand_result']['name'],
+                    'win_type': 'high (scoops - no qualifying low)'
+                })
+        else:
+            # Split pot between high and low
+            high_pot = self.pot // 2
+            low_pot = self.pot - high_pot  # Low gets extra chip if odd
+
+            # Distribute high half
+            high_share = high_pot // len(best_high_players)
+            high_remainder = high_pot % len(best_high_players)
+
+            for i, player in enumerate(best_high_players):
+                amount = high_share + (1 if i < high_remainder else 0)
+                player['chips'] += amount
+                results.append({
+                    'player': player,
+                    'amount': amount,
+                    'hand': player['hand_result']['name'],
+                    'win_type': 'high'
+                })
+
+            # Distribute low half
+            low_share = low_pot // len(best_low_players)
+            low_remainder = low_pot % len(best_low_players)
+
+            for i, player in enumerate(best_low_players):
+                amount = low_share + (1 if i < low_remainder else 0)
+                player['chips'] += amount
+
+                # Check if this player also won high (scoop!)
+                already_won_high = any(r['player'] == player and r['win_type'] == 'high' for r in results)
+                if already_won_high:
+                    # Update existing result to show scoop
+                    for r in results:
+                        if r['player'] == player and r['win_type'] == 'high':
+                            r['amount'] += amount
+                            r['win_type'] = 'SCOOP (high + low)'
+                            r['low_hand'] = player['low_result']['name']
+                            break
+                else:
+                    results.append({
+                        'player': player,
+                        'amount': amount,
+                        'hand': player['low_result']['name'],
+                        'win_type': 'low'
+                    })
+
+        self.game_started = False
+        return results
 
     def get_state(self, for_session=None):
         """Get current game state for client."""
@@ -1110,6 +1479,8 @@ class StudFollowQueenGame(BasePokerGame):
                 player_data['up_cards'] = p.get('up_cards', [])
                 if p.get('hand_result'):
                     player_data['hand_result'] = p['hand_result']
+                if p.get('low_result'):
+                    player_data['low_result'] = p['low_result']
                 player_data['cards_revealed'] = has_revealed
             else:
                 # Hide down cards from opponents until they reveal
@@ -1142,7 +1513,8 @@ class StudFollowQueenGame(BasePokerGame):
             'wild_card_history': self.wild_card_history,
             'community_cards': [],  # No community cards in Stud
             'ante_amount': self.ante_amount,
-            'bring_in_amount': self.bring_in_amount
+            'bring_in_amount': self.bring_in_amount,
+            'hi_lo': self.hi_lo
         }
 
 
@@ -1280,6 +1652,69 @@ def evaluate_bot_hand(player, wild_rank='Q'):
             return 0.05 + (high_value / 14) * 0.10, "High Card"
         return 0.05, "High Card"
 
+def evaluate_bot_low_hand(player, wild_rank='Q'):
+    """Evaluate a bot's low hand potential for Hi-Lo games (0.0 to 1.0 scale).
+
+    Returns a tuple: (low_strength, low_name)
+    Low strength scale:
+    - 0.0: No qualifying low possible
+    - 0.3-0.5: Eight low
+    - 0.5-0.7: Seven low
+    - 0.7-0.85: Six low
+    - 0.85-0.95: Wheel draw or six-four
+    - 0.95-1.0: The Wheel (A-2-3-4-5)
+    """
+    down_cards = player.get('down_cards', [])
+    up_cards = player.get('up_cards', [])
+    all_cards = down_cards + up_cards
+
+    if len(all_cards) < 3:
+        # Too early to evaluate low potential
+        return 0.0, "Too early"
+
+    # Count low cards (A-8) excluding wilds
+    low_ranks = set()
+    wild_count = 0
+
+    for card in all_cards:
+        rank = card.get('rank', '')
+        if rank == 'Q' or rank == wild_rank:
+            wild_count += 1
+        elif rank in ['A', '2', '3', '4', '5', '6', '7', '8']:
+            low_ranks.add(rank)
+
+    # Calculate low potential
+    unique_low_cards = len(low_ranks)
+    total_low_potential = unique_low_cards + wild_count
+
+    if total_low_potential < 5:
+        # Can't make a qualifying low
+        if total_low_potential >= 3:
+            return 0.15, "Low draw"
+        return 0.0, "No low"
+
+    # Has qualifying low - evaluate strength
+    # Convert ranks to values for comparison
+    low_values = {'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8}
+    card_values = sorted([low_values[r] for r in low_ranks])
+
+    # Add wild cards as best available
+    available = [v for v in [1, 2, 3, 4, 5, 6, 7, 8] if v not in card_values]
+    for _ in range(wild_count):
+        if available:
+            card_values.append(available.pop(0))
+    card_values = sorted(card_values)[:5]
+
+    if card_values == [1, 2, 3, 4, 5]:
+        return 0.98, "The Wheel"
+    elif max(card_values) == 6:
+        return 0.80, "Six Low"
+    elif max(card_values) == 7:
+        return 0.60, "Seven Low"
+    else:
+        return 0.40, "Eight Low"
+
+
 def get_bot_action(player, game_state, wild_rank='Q'):
     """Determine what action a bot should take based on hand strength.
 
@@ -1289,6 +1724,7 @@ def get_bot_action(player, game_state, wild_rank='Q'):
     - Medium hands (0.25-0.5): Call reasonable bets, sometimes bet
     - Weak hands (<0.25): Check when free, fold to big bets
     - Consider pot odds vs hand strength
+    - In Hi-Lo mode: also consider low hand potential
     """
     current_bet = game_state.get('current_bet', 0)
     player_bet = player.get('current_bet', 0)
@@ -1296,9 +1732,32 @@ def get_bot_action(player, game_state, wild_rank='Q'):
     pot = game_state.get('pot', 0)
     chips = player.get('chips', 0)
     phase = game_state.get('phase', '')
+    hi_lo = game_state.get('hi_lo', False)
 
-    # Evaluate hand strength
+    # Evaluate HIGH hand strength
     hand_strength, hand_name = evaluate_bot_hand(player, wild_rank)
+
+    # In Hi-Lo mode, also evaluate LOW hand potential
+    low_strength = 0.0
+    low_name = ""
+    if hi_lo:
+        low_strength, low_name = evaluate_bot_low_hand(player, wild_rank)
+
+        # Combine high and low for overall hand value
+        # A hand that can scoop (win both high and low) is very valuable
+        if hand_strength > 0.5 and low_strength > 0.3:
+            # Potential scoop - boost effective strength
+            combined_strength = (hand_strength * 0.6) + (low_strength * 0.5)
+            hand_name = f"{hand_name} + {low_name}"
+        elif low_strength > 0.3:
+            # Has low potential - this adds value even if high is weak
+            combined_strength = max(hand_strength, low_strength * 0.8)
+            if low_strength > hand_strength:
+                hand_name = f"{low_name} (low draw)"
+        else:
+            combined_strength = hand_strength
+
+        hand_strength = min(combined_strength, 1.0)
 
     # Add some randomness (personality)
     effective_strength = hand_strength + random.uniform(-0.1, 0.1)
@@ -1504,6 +1963,7 @@ def handle_new_game(data):
     global game, taken_names
     game_mode = data.get('game_mode', 'stud_follow_queen')
     num_players = data.get('num_players', 6)
+    hi_lo = data.get('hi_lo', False)
 
     # Save existing players and their session mappings if any
     existing_players = []
@@ -1515,7 +1975,8 @@ def handle_new_game(data):
             num_players=num_players,
             starting_chips=1000,
             ante_amount=5,
-            bring_in_amount=10
+            bring_in_amount=10,
+            hi_lo=hi_lo
         )
     else:  # Default to Hold'em
         game = HoldemGame(
@@ -1715,8 +2176,11 @@ def handle_determine_winner():
                 'chips': w['player']['chips']
             },
             'amount': w['amount'],
-            'hand': w['hand']
-        } for w in winners]
+            'hand': w['hand'],
+            'win_type': w.get('win_type', 'high'),
+            'low_hand': w.get('low_hand')
+        } for w in winners],
+        'hi_lo': getattr(game, 'hi_lo', False)
     }, room='poker_game')
     broadcast_game_state()
 
@@ -2040,6 +2504,7 @@ HTML_TEMPLATE = '''
             border: 2px solid rgba(255,215,0,0.5);
             z-index: 1000;
             animation: floatIn 0.3s ease-out;
+            transition: opacity 0.15s ease-out;
         }
 
         @keyframes floatIn {
@@ -2571,6 +3036,10 @@ HTML_TEMPLATE = '''
                 <option value="9">9 Players</option>
             </select>
         </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="hiLoMode" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="hiLoMode" style="color: #ffd700; font-weight: bold; cursor: pointer;" title="Split pot between best high and best qualifying low hand (8-or-better)">Hi-Lo</label>
+        </div>
         <button class="btn btn-primary" onclick="newGame()">New Game</button>
         <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none;">Start Game</button>
         <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none;">New Hand</button>
@@ -2783,7 +3252,10 @@ HTML_TEMPLATE = '''
             <div class="poker-table">
                 <div class="pot-display">
                     <div class="pot-amount">Pot: <span id="studPotAmount">0</span> tokens <span class="dollar-equiv">($<span id="studPotDollars">0.00</span>)</span></div>
-                    <div class="phase-display">Phase: <span id="studPhaseDisplay">-</span></div>
+                    <div class="phase-display">
+                        Phase: <span id="studPhaseDisplay">-</span>
+                        <span id="hiLoBadge" style="display: none; margin-left: 10px; background: linear-gradient(145deg, #e74c3c, #27ae60); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">HI-LO</span>
+                    </div>
                 </div>
 
                 <div class="stud-players-grid" id="studPlayersGrid">
@@ -2924,8 +3396,15 @@ HTML_TEMPLATE = '''
                 isMyTurn: state.is_my_turn,
                 gameStarted: state.game_started,
                 gameMode: state.game_mode,
+                hiLo: state.hi_lo,
                 players: playerInfo
             });
+
+            // Sync Hi-Lo checkbox with current game state
+            const hiLoCheckbox = document.getElementById('hiLoMode');
+            if (hiLoCheckbox && state.hi_lo !== undefined) {
+                hiLoCheckbox.checked = state.hi_lo;
+            }
 
             updateDisplay();
             updateButtons();
@@ -2964,13 +3443,40 @@ HTML_TEMPLATE = '''
         });
 
         socket.on('winners', (data) => {
-            // Build winner display HTML
+            // Build winner display HTML with Hi-Lo support
             let winnerHTML = '';
+            const isHiLo = data.hi_lo || false;
+
             data.winners.forEach(w => {
+                // Determine win type badge styling
+                let winTypeBadge = '';
+                let winTypeColor = '#ffd700';
+
+                if (w.win_type === 'low') {
+                    winTypeBadge = '📉 LOW';
+                    winTypeColor = '#2ecc71';
+                } else if (w.win_type === 'SCOOP (high + low)') {
+                    winTypeBadge = '🎯 SCOOP!';
+                    winTypeColor = '#e74c3c';
+                } else if (w.win_type === 'high (scoops - no qualifying low)') {
+                    winTypeBadge = '📈 HIGH (No Low)';
+                    winTypeColor = '#ffd700';
+                } else if (w.win_type === 'high' && isHiLo) {
+                    winTypeBadge = '📈 HIGH';
+                    winTypeColor = '#ffd700';
+                }
+
+                // Build hand description
+                let handDesc = w.hand || '';
+                if (w.win_type === 'SCOOP (high + low)' && w.low_hand) {
+                    handDesc = `${w.hand} + ${w.low_hand}`;
+                }
+
                 winnerHTML += `<div class="winner-entry">
                     <div class="winner-name">${w.player.name}</div>
+                    ${winTypeBadge ? `<div style="color: ${winTypeColor}; font-weight: bold; font-size: 0.9rem;">${winTypeBadge}</div>` : ''}
                     <div class="winner-amount">Wins ${formatMoney(w.amount)} tokens ($${tokensToDollars(w.amount)})</div>
-                    ${w.hand ? `<div class="winner-hand">${w.hand}</div>` : ''}
+                    ${handDesc ? `<div class="winner-hand">${handDesc}</div>` : ''}
                 </div>`;
             });
 
@@ -2983,9 +3489,15 @@ HTML_TEMPLATE = '''
             }
 
             // Also update status message
-            let winnerText = data.winners.map(w =>
-                `${w.player.name} wins ${formatMoney(w.amount)} tokens${w.hand ? ` with ${w.hand}` : ''}`
-            ).join('. ');
+            let winnerText = data.winners.map(w => {
+                let typeLabel = '';
+                if (isHiLo && w.win_type !== 'fold') {
+                    if (w.win_type === 'low') typeLabel = ' (Low)';
+                    else if (w.win_type === 'SCOOP (high + low)') typeLabel = ' (SCOOP!)';
+                    else if (w.win_type.includes('high')) typeLabel = ' (High)';
+                }
+                return `${w.player.name} wins ${formatMoney(w.amount)} tokens${typeLabel}${w.hand ? ` with ${w.hand}` : ''}`;
+            }).join('. ');
             const statusEl = document.getElementById('gameStatus');
             if (statusEl) {
                 statusEl.innerHTML = `<strong style="color: #ffd700; font-size: 1.2rem;">🏆 ${winnerText}</strong><br><em>Click your down cards to reveal them to other players.</em>`;
@@ -3064,7 +3576,8 @@ HTML_TEMPLATE = '''
 
         function newGame() {
             const numPlayers = parseInt(document.getElementById('numPlayers').value);
-            socket.emit('new_game', { game_mode: 'stud_follow_queen', num_players: numPlayers });
+            const hiLo = document.getElementById('hiLoMode').checked;
+            socket.emit('new_game', { game_mode: 'stud_follow_queen', num_players: numPlayers, hi_lo: hiLo });
         }
 
         function startGame() {
@@ -3509,11 +4022,22 @@ HTML_TEMPLATE = '''
                     statusHTML = '<span class="player-status status-all-in">ALL IN</span>';
                 }
 
-                // Hand result
+                // Hand result (high and low in Hi-Lo mode)
                 let handResultHTML = '';
                 if (player.hand_result && gameState.phase === 'showdown') {
                     const cardsStr = player.hand_result.best_cards ? cardsToShortNotation(player.hand_result.best_cards) : '';
-                    handResultHTML = `<div class="hand-result">${player.hand_result.name}${cardsStr ? ' (' + cardsStr + ')' : ''}</div>`;
+                    const highLabel = gameState.hi_lo ? '<span style="color: #ffd700;">HIGH:</span> ' : '';
+                    handResultHTML = `<div class="hand-result">${highLabel}${player.hand_result.name}${cardsStr ? ' (' + cardsStr + ')' : ''}</div>`;
+
+                    // Show low hand if Hi-Lo mode
+                    if (gameState.hi_lo && player.low_result) {
+                        if (player.low_result.qualifies) {
+                            const lowCardsStr = player.low_result.best_cards ? cardsToShortNotation(player.low_result.best_cards) : '';
+                            handResultHTML += `<div class="hand-result" style="color: #2ecc71;"><span>LOW:</span> ${player.low_result.name}${lowCardsStr ? ' (' + lowCardsStr + ')' : ''}</div>`;
+                        } else {
+                            handResultHTML += `<div class="hand-result" style="color: #e74c3c; opacity: 0.7;"><span>LOW:</span> No Qualifier</div>`;
+                        }
+                    }
                 }
 
                 // Check if this player's down cards are visible (not hidden)
@@ -3592,6 +4116,12 @@ HTML_TEMPLATE = '''
                     'showdown': 'Showdown'
                 };
                 studPhaseEl.textContent = PHASE_NAMES[gameState.phase] || gameState.phase;
+            }
+
+            // Show/hide Hi-Lo badge
+            const hiLoBadge = document.getElementById('hiLoBadge');
+            if (hiLoBadge) {
+                hiLoBadge.style.display = gameState.hi_lo ? 'inline-block' : 'none';
             }
             } catch (error) {
                 console.error('Error in renderStudTable:', error);
@@ -3814,6 +4344,45 @@ HTML_TEMPLATE = '''
             if (algorithmInfo) algorithmInfo.style.display = 'none';
             info.style.display = info.style.display === 'none' ? 'block' : 'none';
         }
+
+        // Proximity-based opacity for action panel
+        (function() {
+            const MIN_OPACITY = 0.12;  // Minimum opacity when far away
+            const MAX_OPACITY = 1.0;   // Full opacity when close
+            const MAX_DISTANCE = 400;  // Distance (px) at which minimum opacity is reached
+
+            document.addEventListener('mousemove', function(e) {
+                const panel = document.getElementById('actionPanel');
+                if (!panel || panel.style.display === 'none') return;
+
+                // Get panel center position
+                const rect = panel.getBoundingClientRect();
+                const panelCenterX = rect.left + rect.width / 2;
+                const panelCenterY = rect.top + rect.height / 2;
+
+                // Calculate distance from mouse to panel center
+                const dx = e.clientX - panelCenterX;
+                const dy = e.clientY - panelCenterY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Calculate opacity based on distance
+                // Closer = more opaque, farther = more transparent
+                const normalizedDistance = Math.min(distance / MAX_DISTANCE, 1);
+                const opacity = MAX_OPACITY - (normalizedDistance * (MAX_OPACITY - MIN_OPACITY));
+
+                panel.style.opacity = opacity;
+            });
+
+            // Ensure full opacity when hovering directly over the panel
+            document.addEventListener('DOMContentLoaded', function() {
+                const panel = document.getElementById('actionPanel');
+                if (panel) {
+                    panel.addEventListener('mouseenter', function() {
+                        this.style.opacity = MAX_OPACITY;
+                    });
+                }
+            });
+        })();
     </script>
 </body>
 </html>
@@ -3885,9 +4454,12 @@ def api_winner():
                 'chips': w['player']['chips']
             },
             'amount': w['amount'],
-            'hand': w['hand']
+            'hand': w['hand'],
+            'win_type': w.get('win_type', 'high'),
+            'low_hand': w.get('low_hand')
         } for w in winners],
-        'state': game.get_state()
+        'state': game.get_state(),
+        'hi_lo': getattr(game, 'hi_lo', False)
     })
 
 @app.route('/api/shuffle')
