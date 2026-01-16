@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Check simple-websocket availability
 try:
     import simple_websocket
-    logger.info(f"simple-websocket version: {simple_websocket.__version__}")
+    logger.info("simple-websocket is installed")
 except ImportError as e:
     logger.warning(f"simple-websocket not available: {e}")
 
