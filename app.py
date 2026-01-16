@@ -2700,6 +2700,54 @@ HTML_TEMPLATE = '''
                 <h3>🃏 Wild Cards in Follow the Queen</h3>
                 <p><strong>Queens are always wild.</strong> When a Queen is dealt face-up, the next face-up card's rank also becomes wild. Wild cards can substitute for ANY card to make the best hand!</p>
             </div>
+
+            <h2 style="margin-top: 30px;">📉 Low Hand Rankings (Hi-Lo & Lo Games)</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">In low games, the <strong>lowest</strong> hand wins. Aces play low. Straights and flushes don't count against you!</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+                <div class="info-section" style="border-left-color: #27ae60; background: rgba(39,174,96,0.1);">
+                    <h3>1. The Wheel (Best Low) 🏆</h3>
+                    <p>A-2-3-4-5 — The perfect low hand!</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♠</span> 2<span style="color:red;">♥</span> 3<span style="color:red;">♦</span> 4<span style="color:black;">♣</span> 5<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #2ecc71;">
+                    <h3>2. Six-Four Low</h3>
+                    <p>A-2-3-4-6 — Second best low.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:red;">♥</span> 2<span style="color:black;">♠</span> 3<span style="color:black;">♣</span> 4<span style="color:red;">♦</span> 6<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #3498db;">
+                    <h3>3. Six-Five Low</h3>
+                    <p>A-2-3-5-6 or A-2-4-5-6</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♣</span> 2<span style="color:red;">♥</span> 3<span style="color:black;">♠</span> 5<span style="color:red;">♦</span> 6<span style="color:red;">♥</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #9b59b6;">
+                    <h3>4. Seven Low</h3>
+                    <p>Any 5 unpaired cards, 7-high.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♠</span> 2<span style="color:red;">♦</span> 3<span style="color:black;">♣</span> 4<span style="color:red;">♥</span> 7<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e67e22;">
+                    <h3>5. Eight Low (Qualifier)</h3>
+                    <p>Any 5 unpaired cards, 8-high. Required to qualify in most Hi-Lo games!</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:red;">♥</span> 2<span style="color:black;">♠</span> 4<span style="color:red;">♦</span> 6<span style="color:black;">♣</span> 8<span style="color:black;">♠</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e74c3c;">
+                    <h3>No Low / No Qualifier</h3>
+                    <p>Pairs, or cards 9+ disqualify a low hand in "8-or-better" games.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">♠</span> 2<span style="color:red;">♥</span> 3<span style="color:red;">♦</span> 3<span style="color:black;">♣</span> 5<span style="color:black;">♠</span> ❌</div>
+                </div>
+            </div>
+
+            <div class="info-section" style="margin-top: 20px; background: rgba(46,204,113,0.1); border-left-color: #2ecc71;">
+                <h3>📖 How Low Hands Work</h3>
+                <p><strong>Reading low hands:</strong> Compare from highest card down. A-2-3-4-6 beats A-2-3-5-6 because 4 < 5.</p>
+                <p style="margin-top: 10px;"><strong>Eight-or-better:</strong> To qualify for low, all 5 cards must be 8 or lower with no pairs. If no one qualifies, the high hand wins the entire pot.</p>
+                <p style="margin-top: 10px;"><strong>Scooping:</strong> The same hand can win both high and low! A-2-3-4-5 is both the best low AND a straight for high.</p>
+            </div>
         </div>
 
         <!-- Wild Card Panel (Stud only) -->
