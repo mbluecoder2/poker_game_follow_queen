@@ -1502,7 +1502,7 @@ def handle_join_game(data):
 def handle_new_game(data):
     """Handle new game creation."""
     global game, taken_names
-    game_mode = data.get('game_mode', 'holdem')
+    game_mode = data.get('game_mode', 'stud_follow_queen')
     num_players = data.get('num_players', 6)
 
     # Save existing players and their session mappings if any
@@ -2559,12 +2559,6 @@ HTML_TEMPLATE = '''
 
     <div class="controls-bar" id="gameControls" style="display: none;">
         <div style="display: flex; align-items: center; gap: 10px;">
-            <label for="gameMode" style="color: #ffd700; font-weight: bold;">Game Type:</label>
-            <select id="gameMode" class="btn" style="padding: 10px; background: rgba(255,255,255,0.9); color: #1a3555; cursor: pointer;">
-                <option value="holdem">Texas Hold'em</option>
-                <option value="stud_follow_queen" selected>Follow the Queen</option>
-            </select>
-
             <label for="numPlayers" style="color: #ffd700; font-weight: bold;">Players:</label>
             <select id="numPlayers" class="btn" style="padding: 10px; background: rgba(255,255,255,0.9); color: #1a3555; cursor: pointer;">
                 <option value="2">2 Players</option>
@@ -3021,9 +3015,8 @@ HTML_TEMPLATE = '''
         }
 
         function newGame() {
-            const gameMode = document.getElementById('gameMode').value;
             const numPlayers = parseInt(document.getElementById('numPlayers').value);
-            socket.emit('new_game', { game_mode: gameMode, num_players: numPlayers });
+            socket.emit('new_game', { game_mode: 'stud_follow_queen', num_players: numPlayers });
         }
 
         function startGame() {
