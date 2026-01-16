@@ -2771,7 +2771,7 @@ HTML_TEMPLATE = '''
 
     <script>
         let socket = io({
-            transports: ['websocket', 'polling'],
+            transports: ['polling'],
             reconnection: true,
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
