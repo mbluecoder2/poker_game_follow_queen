@@ -25,7 +25,12 @@
       "Bash(git push)",
       "Bash(git push:*)",
       "WebFetch(domain:poker-follow-queen.onrender.com)",
-      "WebFetch(domain:poker-game-follow-queen.onrender.com)"
+      "WebFetch(domain:poker-game-follow-queen.onrender.com)",
+      "WebFetch(domain:www.malajar.com)",
+      "WebSearch",
+      "WebFetch(domain:flask-socketio.readthedocs.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:community.render.com)"
     ]
   }
 }
