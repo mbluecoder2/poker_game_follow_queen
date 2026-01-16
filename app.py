@@ -5,6 +5,7 @@ Supports deployment on Render.com with WebSocket support via simple-websocket
 """
 
 import os
+import logging
 
 from flask import Flask, render_template_string, jsonify, request, session
 from flask_socketio import SocketIO, emit, join_room  # type: ignore[import-untyped]
@@ -14,9 +15,23 @@ from collections import Counter
 import random
 import secrets
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Check simple-websocket availability
+try:
+    import simple_websocket
+    logger.info(f"simple-websocket version: {simple_websocket.__version__}")
+except ImportError as e:
+    logger.warning(f"simple-websocket not available: {e}")
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=True, engineio_logger=True)
+
+# Log the actual async mode being used
+logger.info(f"SocketIO async_mode: {socketio.async_mode}")
 
 # =============================================================================
 # CARD AND DECK MANAGEMENT
