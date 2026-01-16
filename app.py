@@ -2778,10 +2778,61 @@ HTML_TEMPLATE = '''
     </div>
 
     <script>
-        let socket = io();
+        let socket = io({
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000
+        });
         let gameState = null;
         let sessionId = null;
         let myPlayerName = null;
+
+        // Show loading state in dropdown initially
+        function setDropdownLoading(loading) {
+            const dropdown = document.getElementById('playerName');
+            const joinStatus = document.getElementById('joinStatus');
+            if (loading) {
+                dropdown.innerHTML = '<option value="">⏳ Connecting to server...</option>';
+                dropdown.disabled = true;
+                if (joinStatus) joinStatus.textContent = 'Waiting for server connection...';
+            } else {
+                dropdown.disabled = false;
+                if (joinStatus) joinStatus.textContent = '';
+            }
+        }
+
+        // Set loading state on page load
+        setDropdownLoading(true);
+
+        // Socket.IO connection event handlers
+        socket.on('connect', () => {
+            console.log('Socket connected');
+            setDropdownLoading(false);
+        });
+
+        socket.on('connect_error', (error) => {
+            console.log('Connection error:', error);
+            const dropdown = document.getElementById('playerName');
+            dropdown.innerHTML = '<option value="">❌ Connection failed - retrying...</option>';
+            const joinStatus = document.getElementById('joinStatus');
+            if (joinStatus) joinStatus.textContent = 'Server may be starting up, please wait...';
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected:', reason);
+            const joinStatus = document.getElementById('joinStatus');
+            if (joinStatus && !myPlayerName) {
+                joinStatus.textContent = 'Disconnected - reconnecting...';
+            }
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+            console.log('Reconnected after', attemptNumber, 'attempts');
+            const joinStatus = document.getElementById('joinStatus');
+            if (joinStatus) joinStatus.textContent = '';
+        });
 
         // Socket.IO event listeners
         socket.on('connected', (data) => {
@@ -2790,6 +2841,7 @@ HTML_TEMPLATE = '''
         });
 
         socket.on('name_availability', (data) => {
+            setDropdownLoading(false);
             updatePlayerNameDropdown(data.all_names, data.taken);
         });
 
