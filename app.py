@@ -3241,10 +3241,105 @@ HTML_TEMPLATE = '''
                 return cards;
             }
 
-            // Evaluate hand
+            // Check for straight (including with wild cards)
+            function checkStraight(cards, wilds) {
+                // Get unique rank indices of non-wild cards
+                const nonWildRankIndices = [];
+                cards.forEach(card => {
+                    const isWild = card.rank === 'Q' || (wildRank && card.rank === wildRank);
+                    if (!isWild) {
+                        const idx = rankOrder.indexOf(card.rank);
+                        if (idx !== -1 && !nonWildRankIndices.includes(idx)) {
+                            nonWildRankIndices.push(idx);
+                        }
+                    }
+                });
+                nonWildRankIndices.sort((a, b) => a - b);
+
+                const numWilds = wilds.length;
+                const numNonWilds = nonWildRankIndices.length;
+
+                // Need at least 5 total cards to make a straight
+                if (numNonWilds + numWilds < 5) return null;
+
+                // Try to find a 5-card straight window
+                // Check each possible starting position (0=2 through 9=10 for regular, or wheel A-5)
+                for (let start = 9; start >= 0; start--) {
+                    // Check if we can make a straight from 'start' to 'start+4'
+                    let gaps = 0;
+                    let straightCards = [];
+                    for (let i = start; i <= start + 4; i++) {
+                        if (nonWildRankIndices.includes(i)) {
+                            // Find a card with this rank
+                            const rank = rankOrder[i];
+                            const card = cards.find(c => c.rank === rank && !straightCards.includes(c));
+                            if (card) straightCards.push(card);
+                        } else {
+                            gaps++;
+                        }
+                    }
+                    if (gaps <= numWilds) {
+                        // We can make this straight with wilds
+                        for (let i = 0; i < gaps && i < wilds.length; i++) {
+                            straightCards.push(wilds[i]);
+                        }
+                        return { highCard: start + 4, cards: straightCards };
+                    }
+                }
+
+                // Check for wheel (A-2-3-4-5) - Ace is index 12
+                let wheelGaps = 0;
+                let wheelCards = [];
+                const wheelIndices = [12, 0, 1, 2, 3]; // A, 2, 3, 4, 5
+                for (const i of wheelIndices) {
+                    if (nonWildRankIndices.includes(i)) {
+                        const rank = rankOrder[i];
+                        const card = cards.find(c => c.rank === rank && !wheelCards.includes(c));
+                        if (card) wheelCards.push(card);
+                    } else {
+                        wheelGaps++;
+                    }
+                }
+                if (wheelGaps <= numWilds) {
+                    for (let i = 0; i < wheelGaps && i < wilds.length; i++) {
+                        wheelCards.push(wilds[i]);
+                    }
+                    return { highCard: 3, cards: wheelCards }; // 5-high straight
+                }
+
+                return null;
+            }
+
+            // Check for straight flush
+            function checkStraightFlush() {
+                for (const suit of Object.keys(cardsBySuit)) {
+                    const suitCards = cardsBySuit[suit];
+                    // Include wild cards of this suit
+                    const wildsInSuit = wildCards.filter(c => c.suit === suit);
+                    if (suitCards.length + wildsInSuit.length >= 5) {
+                        const straightResult = checkStraight(suitCards, wildsInSuit);
+                        if (straightResult) {
+                            return { ...straightResult, suit: suit };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            // Evaluate hand (check in order of hand strength)
             if (maxOfKind >= 5) {
                 return result("Five of a Kind!", getOfAKindCards(bestRank, 5));
             }
+
+            // Check for straight flush (before regular flush or straight)
+            const straightFlush = checkStraightFlush();
+            if (straightFlush) {
+                if (straightFlush.highCard === 12) {
+                    return result("Royal Flush!", straightFlush.cards);
+                }
+                return result("Straight Flush", straightFlush.cards);
+            }
+
             if (maxOfKind >= 4) {
                 return result("Four of a Kind", getOfAKindCards(bestRank, 4));
             }
@@ -3256,6 +3351,13 @@ HTML_TEMPLATE = '''
             if (hasFlush) {
                 return result("Flush", cardsBySuit[flushSuit].slice(0, 5));
             }
+
+            // Check for regular straight
+            const straight = checkStraight(allCards, wildCards);
+            if (straight) {
+                return result("Straight", straight.cards);
+            }
+
             if (maxOfKind >= 3) {
                 return result("Three of a Kind", getOfAKindCards(bestRank, 3));
             }
