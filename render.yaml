@@ -1,14 +1,20 @@
+# Exported from Render on 2026-01-16T19:31:54Z
+version: "1"
 services:
-  - type: web
-    name: poker-follow-queen
-    runtime: python
-    plan: free
-    buildCommand: rm -rf .venv && pip install --no-cache-dir -r requirements.txt
-    startCommand: gunicorn -w 1 --threads 100 --bind 0.0.0.0:$PORT app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.4"
-      - key: FLASK_ENV
-        value: production
-      - key: SECRET_KEY
-        generateValue: true
+- type: web
+  name: poker_game_follow_queen
+  runtime: python
+  repo: https://github.com/mbluecoder2/poker_game_follow_queen
+  plan: standard
+  envVars:
+  - key: FLASK_ENV
+    sync: false
+  - key: PYTHON_VERSION
+    sync: false
+  region: virginia
+  buildCommand: pip install -r requirements.txt
+  startCommand: gunicorn app:app
+  domains:
+  - malajar.com
+  - www.malajar.com
+  autoDeployTrigger: commit
