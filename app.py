@@ -4,8 +4,15 @@ A Flask web application with dealing, hand evaluation, and betting mechanics
 Supports deployment on Render.com with WebSocket support
 """
 
-from gevent import monkey
-monkey.patch_all()
+import os
+
+# Only use gevent in production (Render.com)
+if os.environ.get('FLASK_ENV') == 'production':
+    from gevent import monkey
+    monkey.patch_all()
+    ASYNC_MODE = 'gevent'
+else:
+    ASYNC_MODE = 'threading'
 
 from flask import Flask, render_template_string, jsonify, request, session
 from flask_socketio import SocketIO, emit, join_room  # type: ignore[import-untyped]
@@ -14,11 +21,10 @@ from collections import Counter
 
 import random
 import secrets
-import os
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=ASYNC_MODE)
 
 # =============================================================================
 # CARD AND DECK MANAGEMENT
