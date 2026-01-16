@@ -1,18 +1,10 @@
 """
 Texas Hold'em Poker Game
 A Flask web application with dealing, hand evaluation, and betting mechanics
-Supports deployment on Render.com with WebSocket support
+Supports deployment on Render.com with WebSocket support via simple-websocket
 """
 
 import os
-
-# Only use gevent in production (Render.com)
-if os.environ.get('FLASK_ENV') == 'production':
-    from gevent import monkey
-    monkey.patch_all()
-    ASYNC_MODE = 'gevent'
-else:
-    ASYNC_MODE = 'threading'
 
 from flask import Flask, render_template_string, jsonify, request, session
 from flask_socketio import SocketIO, emit, join_room  # type: ignore[import-untyped]
@@ -24,7 +16,7 @@ import secrets
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=ASYNC_MODE)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # =============================================================================
 # CARD AND DECK MANAGEMENT
@@ -2779,8 +2771,7 @@ HTML_TEMPLATE = '''
 
     <script>
         let socket = io({
-            transports: ['polling'],
-            upgrade: false,
+            transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
