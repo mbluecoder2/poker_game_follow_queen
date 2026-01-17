@@ -2016,6 +2016,11 @@ def handle_start_game():
 
     game.game_started = True
 
+    # Set dealer so that after new_hand() increments it, the starting player becomes dealer
+    player_id = game.get_player_by_session(request.sid)
+    if player_id is not None:
+        game.dealer_position = (player_id - 1) % len(game.players)
+
     # Auto-deal the first hand
     game.new_hand()
 
