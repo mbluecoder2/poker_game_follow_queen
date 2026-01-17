@@ -3514,7 +3514,7 @@ HTML_TEMPLATE = '''
                     countdown--;
                     if (countdownEl) countdownEl.textContent = countdown;
                     if (countdown <= 0) {
-                        closeWinnerModal();
+                        closeWinnerModal(true);  // true = auto-closed, will start new hand
                     }
                 }, 1000);
             }
@@ -4350,14 +4350,30 @@ HTML_TEMPLATE = '''
         }
 
         let winnerCountdownInterval = null;
+        let newHandTimeout = null;
 
-        function closeWinnerModal() {
+        function closeWinnerModal(autoClose = false) {
             if (winnerCountdownInterval) {
                 clearInterval(winnerCountdownInterval);
                 winnerCountdownInterval = null;
             }
+            // If manually closed, cancel any pending new hand timer
+            if (!autoClose && newHandTimeout) {
+                clearTimeout(newHandTimeout);
+                newHandTimeout = null;
+            }
             document.getElementById('winnerModal').style.display = 'none';
-            document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
+
+            if (autoClose) {
+                // Auto-closed: start new hand in 8 seconds
+                document.getElementById('gameStatus').textContent = 'New hand starting in 8 seconds...';
+                newHandTimeout = setTimeout(() => {
+                    newHandTimeout = null;
+                    newHand();
+                }, 8000);
+            } else {
+                document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
+            }
         }
 
         function revealMyCards() {
