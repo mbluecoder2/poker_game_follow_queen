@@ -1520,7 +1520,7 @@ class StudFollowQueenGame(BasePokerGame):
 
 # Global game instance
 # Start with Follow the Queen for testing
-game = StudFollowQueenGame(num_players=8, starting_chips=1000, ante_amount=5, bring_in_amount=10)
+game = StudFollowQueenGame(num_players=7, starting_chips=1000, ante_amount=5, bring_in_amount=10)
 
 # Available player names
 PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4', 'Bot 5']
@@ -2043,21 +2043,18 @@ def handle_reset_game():
 
     player_id = game.get_player_by_session(request.sid) if game else None
 
-    # Find the player and check if they are "Michael H"
-    if player_id is None:
-        emit('error', {'message': 'You are not in this game'})
-        return
-
-    player = game.players[player_id]
-    if player['name'] != 'Michael H':
-        emit('error', {'message': 'Only Michael H can reset the game'})
-        return
+    # Get player name if available, otherwise use "A USER"
+    if game and player_id is not None:
+        player = game.players[player_id]
+        playerName = player['name'].upper()
+    else:
+        playerName = "A USER"
 
     # Notify all clients that server is restarting
-    socketio.emit('server_restart', {'message': 'Game reset by Michael H. Server restarting...'}, room='poker_game')
+    socketio.emit('server_restart', {'message': f"Game reset by {playerName}. Server restarting..."}, room='poker_game')
 
     print("\n" + "=" * 50)
-    print("HARD RESET TRIGGERED BY MICHAEL H")
+    print(f"HARD RESET TRIGGERED BY {playerName}")
     print("Clearing all game state and restarting server...")
     print("=" * 50 + "\n")
 
@@ -3006,7 +3003,7 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div class="header">
-        <h1 id="gameTitle">🃏 Texas Hold'em Poker - Multiplayer</h1>
+        <h1 id="gameTitle">🃏 Various Poker Games (HiLo) - Multiplayer</h1>
         <div class="token-info">💰 100 tokens = $1.00</div>
     </div>
 
@@ -3017,7 +3014,8 @@ HTML_TEMPLATE = '''
             <select id="playerName" style="padding: 10px; border-radius: 5px; border: none; min-width: 200px; background: white; color: #1a3555; font-weight: bold; cursor: pointer;">
                 <option value="">-- Select Your Name --</option>
             </select>
-            <button class="btn btn-primary" onclick="joinGame()">Join Game</button>
+            <button class="btn btn-primary" onclick="joinGame()" style="color: white;">Join Game</button>
+            <button class="btn btn-primary" onclick="resetGame()" style="background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">🔄 Reset Server</button>
         </div>
         <div id="joinStatus" style="color: #ff6b6b;"></div>
     </div>
@@ -3040,12 +3038,12 @@ HTML_TEMPLATE = '''
             <input type="checkbox" id="hiLoMode" style="width: 18px; height: 18px; cursor: pointer;">
             <label for="hiLoMode" style="color: #ffd700; font-weight: bold; cursor: pointer;" title="Split pot between best high and best qualifying low hand (8-or-better)">Hi-Lo</label>
         </div>
-        <button class="btn btn-primary" onclick="newGame()">New Game</button>
-        <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none;">Start Game</button>
-        <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none;">New Hand</button>
-        <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="display: none; background: linear-gradient(145deg, #e74c3c, #c0392b);">🔄 Reset Game</button>
-        <button class="btn btn-primary" onclick="toggleAlgorithmInfo()">📚 Shuffle Info</button>
-        <button class="btn btn-primary" onclick="toggleHandRankings()" style="background: linear-gradient(145deg, #9b59b6, #8e44ad);">🏆 Hand Rankings</button>
+        <button class="btn btn-primary" onclick="newGame()" style="color: white;">New Game</button>
+        <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none; color: white;">Start Game</button>
+        <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none; color: white;">New Hand</button>
+        <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="display: none; background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">🔄 Reset Server</button>
+        <button class="btn btn-primary" onclick="toggleAlgorithmInfo()" style="color: white;">📚 Shuffle Info</button>
+        <button class="btn btn-primary" onclick="toggleHandRankings()" style="background: linear-gradient(145deg, #9b59b6, #8e44ad); color: white;">🏆 Hand Rankings</button>
     </div>
     
     <div class="game-container">
@@ -3639,11 +3637,11 @@ HTML_TEMPLATE = '''
         function updateResetButtonVisibility() {
             const resetBtn = document.getElementById('resetGameBtn');
             // Only show reset button for "Michael H"
-            if (myPlayerName === 'Michael H') {
-                resetBtn.style.display = 'inline-block';
-            } else {
-                resetBtn.style.display = 'none';
-            }
+            //if (myPlayerName === "Michael H") {
+            resetBtn.style.display = 'inline-block';
+            //} else {
+            //    resetBtn.style.display = 'none';
+            //}
         }
 
         function updateStatusMessage() {
