@@ -4369,16 +4369,18 @@ HTML_TEMPLATE = '''
             }
             document.getElementById('winnerModal').style.display = 'none';
 
-            if (autoClose) {
-                // Auto-closed: start new hand in 8 seconds
-                document.getElementById('gameStatus').textContent = 'New hand starting in 8 seconds...';
-                newHandTimeout = setTimeout(() => {
-                    newHandTimeout = null;
-                    newHand();
-                }, 8000);
-            } else {
-                document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
-            }
+            // Auto-start new hand disabled for now
+            // if (autoClose) {
+            //     // Auto-closed: start new hand in 8 seconds
+            //     document.getElementById('gameStatus').textContent = 'New hand starting in 8 seconds...';
+            //     newHandTimeout = setTimeout(() => {
+            //         newHandTimeout = null;
+            //         newHand();
+            //     }, 8000);
+            // } else {
+            //     document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
+            // }
+            document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
         }
 
         function revealMyCards() {
