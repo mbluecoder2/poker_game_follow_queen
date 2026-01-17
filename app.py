@@ -3306,7 +3306,7 @@ HTML_TEMPLATE = '''
             <h2>🏆 Winner!</h2>
             <div class="winner-details" id="winnerDetails"></div>
             <button class="btn btn-primary" id="winnerCloseBtn" onclick="closeWinnerModal()">
-                Continue
+                Continue (<span id="winnerCountdown">10</span>s)
             </button>
         </div>
     </div>
@@ -3499,6 +3499,24 @@ HTML_TEMPLATE = '''
             if (winnerDetails && winnerModal) {
                 winnerDetails.innerHTML = winnerHTML;
                 winnerModal.style.display = 'flex';
+
+                // Start countdown timer
+                let countdown = 10;
+                const countdownEl = document.getElementById('winnerCountdown');
+                if (countdownEl) countdownEl.textContent = countdown;
+
+                // Clear any existing countdown
+                if (winnerCountdownInterval) {
+                    clearInterval(winnerCountdownInterval);
+                }
+
+                winnerCountdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdownEl) countdownEl.textContent = countdown;
+                    if (countdown <= 0) {
+                        closeWinnerModal();
+                    }
+                }, 1000);
             }
 
             // Also update status message
@@ -4331,7 +4349,13 @@ HTML_TEMPLATE = '''
             document.getElementById('raiseAmount').value = 0;
         }
 
+        let winnerCountdownInterval = null;
+
         function closeWinnerModal() {
+            if (winnerCountdownInterval) {
+                clearInterval(winnerCountdownInterval);
+                winnerCountdownInterval = null;
+            }
             document.getElementById('winnerModal').style.display = 'none';
             document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
         }
