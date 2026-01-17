@@ -414,7 +414,7 @@ class LowHandEvaluator:
 
         # Build display name
         rank_names = {1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8'}
-        display = '-'.join(rank_names[v] for v in sorted_values)
+        display = '-'.join(rank_names.get(v, str(v)) for v in sorted_values)
 
         # Special names for common lows
         if sorted_values == (5, 4, 3, 2, 1):
@@ -525,7 +525,7 @@ class LowHandEvaluator:
 
                 # Build display name
                 rank_names = {1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8'}
-                display = '-'.join(rank_names[v] for v in sorted_values)
+                display = '-'.join(rank_names.get(v, str(v)) for v in sorted_values)
 
                 if sorted_values == (5, 4, 3, 2, 1):
                     display_name = "The Wheel (A-2-3-4-5)"
@@ -656,6 +656,15 @@ class BasePokerGame:
 
         # Remove busted players
         self.players = [p for p in self.players if p['chips'] > 0]
+
+        # Rebuild player_sessions mapping and update player ids after removal
+        new_player_sessions = {}
+        for new_idx, player in enumerate(self.players):
+            player['id'] = new_idx
+            session_id = player.get('session_id')
+            if session_id:
+                new_player_sessions[session_id] = new_idx
+        self.player_sessions = new_player_sessions
 
         if len(self.players) < 2:
             return  # Game over
@@ -2153,6 +2162,8 @@ def handle_player_action(data):
 @socketio.on('advance_phase')
 def handle_advance_phase():
     """Advance to the next phase."""
+    if not game:
+        return
     game.advance_phase()
     broadcast_game_state()
 
@@ -2165,6 +2176,8 @@ def handle_advance_phase():
 @socketio.on('determine_winner')
 def handle_determine_winner():
     """Determine the winner and distribute pot."""
+    if not game:
+        return
     winners = game.determine_winners()
     socketio.emit('winners', {
         'winners': [{
@@ -2186,6 +2199,8 @@ def handle_determine_winner():
 
 def broadcast_game_state():
     """Broadcast game state to all connected clients."""
+    if not game:
+        return
     print(f"BROADCASTING GAME STATE - Players: {len(game.players)}, Phase: {game.phase if hasattr(game, 'phase') else 'N/A'}")  # DEBUG
 
     # Send personalized state to each player in the game
