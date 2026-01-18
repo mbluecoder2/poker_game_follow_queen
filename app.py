@@ -2036,9 +2036,9 @@ def handle_new_hand():
     player_id = game.get_player_by_session(request.sid)
 
     # Check if this player is the dealer
-    if player_id is None or player_id != game.dealer_position:
-        emit('error', {'message': 'Only the dealer can deal a new hand'})
-        return
+    # if player_id is None or player_id != game.dealer_position:
+    #     emit('error', {'message': 'Only the dealer can deal a new hand'})
+    #     return
 
     if len(game.players) < 2:
         emit('error', {'message': 'Need at least 2 players to start'})
