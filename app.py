@@ -2447,8 +2447,9 @@ HTML_TEMPLATE = '''
             transform: translateY(-5px);
         }
 
-        /* Face-up cards enlarge on hover */
+        /* Face-up cards (and revealed down cards) enlarge on hover */
         .up-cards-group .card:not(.back):hover,
+        .down-cards-group .card:not(.back):hover,
         .community-cards .card:not(.back):hover {
             transform: scale(1.3);
             z-index: 100;
