@@ -630,7 +630,8 @@ class BasePokerGame:
             'is_human': not is_bot,
             'is_bot': is_bot,
             'session_id': session_id,
-            'hand_result': None
+            'hand_result': None,
+            'last_win': 0
         })
         self.player_sessions[session_id] = player_id
         return player_id, "OK"
@@ -804,6 +805,7 @@ class BasePokerGame:
             # Everyone else folded
             winner = active[0]
             winner['chips'] += self.pot
+            winner['last_win'] = self.pot
             # Allow new players to join after hand completes
             self.game_started = False
             return [{'player': winner, 'amount': self.pot, 'hand': None}]
@@ -838,6 +840,7 @@ class BasePokerGame:
         for i, player in enumerate(best_players):
             amount = share + (1 if i < remainder else 0)
             player['chips'] += amount
+            player['last_win'] = amount
             results.append({
                 'player': player,
                 'amount': amount,
@@ -869,7 +872,7 @@ class BasePokerGame:
                 return 'check', 0
             else:
                 # Raise sometimes
-                raise_amount = self.big_blind * random.randint(2, 4)
+                raise_amount = getattr(self, 'ante_amount', 10) * random.randint(2, 4)
                 if raise_amount <= player['chips']:
                     return 'raise', self.current_bet + raise_amount
                 return 'check', 0
@@ -914,7 +917,8 @@ class BasePokerGame:
                 'folded': p['folded'],
                 'is_all_in': p['is_all_in'],
                 'is_human': p['is_human'],
-                'is_dealer': self.players.index(p) == self.dealer_position
+                'is_dealer': self.players.index(p) == self.dealer_position,
+                'last_win': p.get('last_win', 0)
             }
 
             # Only show hole cards for this player or at showdown
@@ -964,9 +968,8 @@ class HoldemGame(BasePokerGame):
 
     PHASES = ['pre-flop', 'flop', 'turn', 'river', 'showdown']
 
-    def __init__(self, num_players=5, starting_chips=1000, small_blind=10, big_blind=20):
-        self.small_blind = small_blind
-        self.big_blind = big_blind
+    def __init__(self, num_players=5, starting_chips=1000, ante_amount=5):
+        self.ante_amount = ante_amount
         super().__init__(num_players, starting_chips)
 
     def reset_game(self):
@@ -980,36 +983,23 @@ class HoldemGame(BasePokerGame):
             player['hole_cards'] = []
 
     def _initialize_hand(self):
-        """Initialize a Hold'em hand: post blinds, deal hole cards."""
-        # Post blinds
-        self._post_blinds()
+        """Initialize a Hold'em hand: post antes, deal hole cards."""
+        # Post antes from all players
+        self._post_antes()
 
         # Deal hole cards
         self._deal_hole_cards()
 
-        # Set first player to act (UTG = dealer + 3)
-        self.current_player = (self.dealer_position + 3) % len(self.players)
+        # Set first player to act (left of dealer)
+        self.current_player = (self.dealer_position + 1) % len(self.players)
         self._skip_folded_players()
 
-    def _post_blinds(self):
-        """Post small and big blinds."""
-        sb_pos = (self.dealer_position + 1) % len(self.players)
-        bb_pos = (self.dealer_position + 2) % len(self.players)
-
-        # Small blind
-        sb_amount = min(self.small_blind, self.players[sb_pos]['chips'])
-        self.players[sb_pos]['chips'] -= sb_amount
-        self.players[sb_pos]['current_bet'] = sb_amount
-        self.pot += sb_amount
-
-        # Big blind
-        bb_amount = min(self.big_blind, self.players[bb_pos]['chips'])
-        self.players[bb_pos]['chips'] -= bb_amount
-        self.players[bb_pos]['current_bet'] = bb_amount
-        self.pot += bb_amount
-
-        self.current_bet = self.big_blind
-        self.last_raiser = bb_pos
+    def _post_antes(self):
+        """All players post ante."""
+        for player in self.players:
+            ante = min(self.ante_amount, player['chips'])
+            player['chips'] -= ante
+            self.pot += ante
 
     def _deal_hole_cards(self):
         """Deal 2 hole cards to each player."""
@@ -1080,8 +1070,7 @@ class HoldemGame(BasePokerGame):
         state = super().get_state(for_session)
         state['game_mode'] = 'holdem'
         state['community_cards'] = self.community_cards
-        state['small_blind'] = self.small_blind
-        state['big_blind'] = self.big_blind
+        state['ante_amount'] = self.ante_amount
         return state
 
 
@@ -1338,6 +1327,7 @@ class StudFollowQueenGame(BasePokerGame):
             # Everyone else folded
             winner = active[0]
             winner['chips'] += self.pot
+            winner['last_win'] = self.pot
             self.game_started = False
             return [{'player': winner, 'amount': self.pot, 'hand': None, 'win_type': 'fold'}]
 
@@ -1372,6 +1362,7 @@ class StudFollowQueenGame(BasePokerGame):
             for i, player in enumerate(best_high_players):
                 amount = share + (1 if i < remainder else 0)
                 player['chips'] += amount
+                player['last_win'] = amount
                 results.append({
                     'player': player,
                     'amount': amount,
@@ -1412,6 +1403,7 @@ class StudFollowQueenGame(BasePokerGame):
             for i, player in enumerate(best_high_players):
                 amount = share + (1 if i < remainder else 0)
                 player['chips'] += amount
+                player['last_win'] = amount
                 results.append({
                     'player': player,
                     'amount': amount,
@@ -1430,6 +1422,7 @@ class StudFollowQueenGame(BasePokerGame):
             for i, player in enumerate(best_high_players):
                 amount = high_share + (1 if i < high_remainder else 0)
                 player['chips'] += amount
+                player['last_win'] = amount
                 results.append({
                     'player': player,
                     'amount': amount,
@@ -1444,6 +1437,7 @@ class StudFollowQueenGame(BasePokerGame):
             for i, player in enumerate(best_low_players):
                 amount = low_share + (1 if i < low_remainder else 0)
                 player['chips'] += amount
+                player['last_win'] = player.get('last_win', 0) + amount  # Add to existing (for scoops)
 
                 # Check if this player also won high (scoop!)
                 already_won_high = any(r['player'] == player and r['win_type'] == 'high' for r in results)
@@ -1480,7 +1474,8 @@ class StudFollowQueenGame(BasePokerGame):
                 'folded': p['folded'],
                 'is_all_in': p['is_all_in'],
                 'is_human': p['is_human'],
-                'is_dealer': self.players.index(p) == self.dealer_position
+                'is_dealer': self.players.index(p) == self.dealer_position,
+                'last_win': p.get('last_win', 0)
             }
 
             # Card visibility: show cards only to owner OR if player has revealed them
@@ -2002,8 +1997,7 @@ def handle_new_game(data):
         game = HoldemGame(
             num_players=num_players,
             starting_chips=1000,
-            small_blind=5,
-            big_blind=10
+            ante_amount=5
         )
 
     # Re-add existing players to the new game
@@ -4119,6 +4113,7 @@ HTML_TEMPLATE = '''
                                 ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                             </div>
                             <div class="player-chips">${formatMoney(player.chips)} tokens <span class="dollar-equiv">($${tokensToDollars(player.chips)})</span></div>
+                            ${player.last_win > 0 ? `<div class="player-last-win" style="color: #2ecc71; font-size: 0.85rem;">Last win: +${formatMoney(player.last_win)}</div>` : ''}
                             ${player.current_bet > 0 ? `<div class="player-bet">Bet: ${formatMoney(player.current_bet)}</div>` : ''}
                             ${statusHTML}
                             ${handResultHTML}
@@ -4258,6 +4253,7 @@ HTML_TEMPLATE = '''
                             ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                         </div>
                         <div class="player-chips">${formatMoney(player.chips)} tokens <span class="dollar-equiv">($${tokensToDollars(player.chips)})</span></div>
+                        ${player.last_win > 0 ? `<div class="player-last-win" style="color: #2ecc71; font-size: 0.85rem;">Last win: +${formatMoney(player.last_win)}</div>` : ''}
                         ${player.current_bet > 0 ? `<div class="player-bet">Bet: ${formatMoney(player.current_bet)}</div>` : ''}
                         <div class="player-cards">
                             ${cardsHTML}
@@ -4343,7 +4339,7 @@ HTML_TEMPLATE = '''
             }
 
             // Set default raise amount
-            document.getElementById('raiseAmount').value = gameState.current_bet * 2 || gameState.big_blind * 2;
+            document.getElementById('raiseAmount').value = gameState.current_bet * 2 || gameState.ante_amount * 2 || 10;
         }
         
         function showRaiseControls() {
@@ -4389,9 +4385,9 @@ HTML_TEMPLATE = '''
             //         newHand();
             //     }, 8000);
             // } else {
-            //     document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
+            //     document.getElementById('gameStatus').textContent = 'Click "New Game" to continue!';
             // }
-            document.getElementById('gameStatus').textContent = 'Click "New Hand" to continue!';
+            document.getElementById('gameStatus').textContent = 'Click "New Game" to continue!';
         }
 
         function revealMyCards() {
@@ -4472,7 +4468,7 @@ def api_new_game():
     global game
     data = request.get_json() or {}
     num_players = data.get('num_players', 6)
-    game = PokerGame(num_players=num_players, starting_chips=1000, small_blind=10, big_blind=20)
+    game = HoldemGame(num_players=num_players, starting_chips=1000, ante_amount=5)
     return jsonify(game.get_state())
 
 @app.route('/api/new-hand', methods=['POST'])
