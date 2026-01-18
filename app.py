@@ -34,6 +34,11 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logge
 logger.info(f"SocketIO async_mode: {socketio.async_mode}")
 
 # =============================================================================
+# BOT CONFIGURATION
+# =============================================================================
+BOT_CAN_FOLD = False  # Set to True to allow bots to fold, False to prevent folding
+
+# =============================================================================
 # CARD AND DECK MANAGEMENT
 # =============================================================================
 
@@ -1887,7 +1892,13 @@ def process_bot_turn():
     # Determine bot action
     action, amount = get_bot_action(current_player, game_state, wild_rank)
 
-    print(f"[BOT] {current_player['name']} decides to {action}" + (f" {int(amount)} tokens" if amount else ""))
+    # If BOT_CAN_FOLD is False, convert fold to call
+    if not BOT_CAN_FOLD and action == 'fold':
+        action = 'call'
+        amount = 0
+        print(f"[BOT] {current_player['name']} would fold but BOT_CAN_FOLD=False, calling instead")
+    else:
+        print(f"[BOT] {current_player['name']} decides to {action}" + (f" {int(amount)} tokens" if amount else ""))
 
     # Execute the action after a short delay (makes it feel more natural)
     def execute_bot_action():
