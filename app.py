@@ -2681,9 +2681,9 @@ HTML_TEMPLATE = '''
         .game-status {
             text-align: center;
             padding: 10px;
-            font-size: 1.2rem;
-            color: #ffd700;
-            min-height: 40px;
+            font-size: 1.5rem;
+            color: #ffffff;
+            min-height: 55px;
         }
         
         /* Winner Announcement */
