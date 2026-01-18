@@ -2237,12 +2237,19 @@ HTML_TEMPLATE = '''
     <title>Texas Hold'em Poker</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
+        /* ===========================================
+           CONFIGURABLE SETTINGS
+           =========================================== */
+        :root {
+            --card-hover-scale: 1.55;  /* Card enlargement on hover (1.55 = 55% larger) */
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #1a3a5a 0%, #0d1a2d 100%);
@@ -2451,7 +2458,7 @@ HTML_TEMPLATE = '''
         .up-cards-group .card:not(.back):hover,
         .down-cards-group .card:not(.back):hover,
         .community-cards .card:not(.back):hover {
-            transform: scale(1.3);
+            transform: scale(var(--card-hover-scale));
             z-index: 100;
             box-shadow: 0 8px 20px rgba(0,0,0,0.5);
         }
