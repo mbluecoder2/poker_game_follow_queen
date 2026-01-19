@@ -3044,7 +3044,7 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div class="header">
-        <h1 id="gameTitle">🃏 Various Poker Games (HiLo) - Multiplayer</h1>
+        <h1 id="gameTitle">🃏 Our Poker Games (HiLo) - Multiplayer</h1>
         <div class="token-info">💰 100 tokens = $1.00</div>
     </div>
 
@@ -4438,8 +4438,17 @@ HTML_TEMPLATE = '''
                 const panel = document.getElementById('actionPanel');
                 if (!panel || panel.style.display === 'none') return;
 
-                // Get panel center position
+                // Get panel bounding rect
                 const rect = panel.getBoundingClientRect();
+
+                // Check if mouse is directly over the panel - if so, full opacity
+                if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                    e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                    panel.style.opacity = MAX_OPACITY;
+                    return;
+                }
+
+                // Get panel center position
                 const panelCenterX = rect.left + rect.width / 2;
                 const panelCenterY = rect.top + rect.height / 2;
 

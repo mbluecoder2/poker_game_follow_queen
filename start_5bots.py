@@ -24,6 +24,7 @@ for i, sio in enumerate(bots):
 print("Connecting 5 bots...")
 for sio in bots:
     sio.connect('http://127.0.0.1:5000', wait_timeout=10)
+    #sio.connect('https://www.malajar.com', wait_timeout=10)
     time.sleep(0.1)
 
 time.sleep(0.3)
