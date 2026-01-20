@@ -11,6 +11,28 @@
             box-sizing: border-box;
         }
 
+        .royal-flush-icon {
+            display: inline-block;
+            width: 1.2em;
+            height: 1.2em;
+            background-image: url('royal flush in heart.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            vertical-align: middle;
+            margin-right: 0.2em;
+            transition: transform 0.2s ease;
+        }
+
+        .royal-flush-icon:hover {
+            transform: scale(1.5);
+        }
+
+        .royal-flush-icon.large {
+            width: 2em;
+            height: 2em;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -392,7 +414,7 @@
             <h2>👑 Follow the Queen</h2>
 
             <div class="wild-card-panel">
-                <div class="current-wild">🃏 Wild Cards: <span style="font-size: 2.5rem;">Queens and 7s</span></div>
+                <div class="current-wild"><span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 2.5rem;">Queens and 7s</span></div>
             </div>
 
             <div class="stud-table">

@@ -18,7 +18,18 @@ Traditional Seven-Card Stud with wild cards:
 - **Dynamic wild cards**: When a Queen is dealt face-up, the next face-up card's rank becomes wild
 - Antes ($5) and bring-in ($10)
 - **Five of a Kind** - the ultimate hand (beats Royal Flush!)
+---
+## Possible Group Names  (Vote!)
 
+### Over all Group Team Names
+1. "Full Stack" - engineering term + poker chip stack double meaning
+2. "Stack Overflow" - engineers will appreciate this, plus poker stacks
+3. "NoVA Aces" - clean and regional
+4. "The Beltway Bluffers" - DC area reference
+5. "Pair of Engineers" - poker hand + profession
+6. "The Royal Flushers" - works on multiple levels
+7. "Debug & Deal" - what you do at work vs. poker night
+8. "Null Pointers" - when your hand is worthless
 ---
 
 ## ✨ Features

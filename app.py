@@ -7,7 +7,7 @@ Supports deployment on Render.com with WebSocket support via simple-websocket
 import os
 import logging
 
-from flask import Flask, render_template_string, jsonify, request, session
+from flask import Flask, render_template_string, jsonify, request, session, send_file
 from flask_socketio import SocketIO, emit, join_room  # type: ignore[import-untyped]
 from itertools import combinations
 from collections import Counter
@@ -1084,12 +1084,14 @@ class StudFollowQueenGame(BasePokerGame):
     PHASES = ['third_street', 'fourth_street', 'fifth_street',
               'sixth_street', 'seventh_street', 'showdown']
 
-    def __init__(self, num_players=5, starting_chips=1000, ante_amount=5, bring_in_amount=10, hi_lo=False):
+    def __init__(self, num_players=5, starting_chips=1000, ante_amount=5, bring_in_amount=10, hi_lo=False, two_natural_sevens_wins=False, deal_sevens_to_michael=False):
         self.ante_amount = ante_amount
         self.bring_in_amount = bring_in_amount
         self.current_wild_rank = 'Q'  # Always starts with Queens only
         self.wild_card_history = []
         self.hi_lo = hi_lo  # Hi-Lo mode: split pot between high and low hands
+        self.two_natural_sevens_wins = two_natural_sevens_wins  # Instant win with 2 natural 7s
+        self.deal_sevens_to_michael = deal_sevens_to_michael  # Debug: force deal 2 sevens to Michael H
         super().__init__(num_players, starting_chips)
 
     def reset_game(self):
@@ -1124,12 +1126,33 @@ class StudFollowQueenGame(BasePokerGame):
         # Post antes
         self._post_antes()
 
+        # Debug: If deal_sevens_to_michael is enabled, find Michael H and prepare 7s
+        michael_player = None
+        if getattr(self, 'deal_sevens_to_michael', False):
+            for player in self.players:
+                if player['name'] == 'Michael H':
+                    michael_player = player
+                    break
+
         # Deal Third Street: 2 down, 1 up
         newly_dealt = []
         for player in self.players:
             # 2 down cards
-            player['down_cards'].append(self.deck.pop())
-            player['down_cards'].append(self.deck.pop())
+            if player == michael_player:
+                # Force deal two 7s to Michael H's hole cards
+                sevens = [c for c in self.deck if c['rank'] == '7']
+                if len(sevens) >= 2:
+                    # Remove two 7s from deck and give to Michael
+                    for seven in sevens[:2]:
+                        self.deck.remove(seven)
+                        player['down_cards'].append(seven)
+                else:
+                    # Not enough 7s, deal normally
+                    player['down_cards'].append(self.deck.pop())
+                    player['down_cards'].append(self.deck.pop())
+            else:
+                player['down_cards'].append(self.deck.pop())
+                player['down_cards'].append(self.deck.pop())
             # 1 up card
             up_card = self.deck.pop()
             player['up_cards'].append(up_card)
@@ -1222,6 +1245,78 @@ class StudFollowQueenGame(BasePokerGame):
                 'new_wild_rank': new_wild_rank,
                 'player_name': queen_player['name']
             })
+
+    def _check_two_natural_sevens(self):
+        """
+        Check if any player has two natural (non-wild) 7s.
+
+        Returns:
+            Player dict if a player has two natural 7s, None otherwise.
+        """
+        if not getattr(self, 'two_natural_sevens_wins', False):
+            return None
+
+        # Skip instant win check in debug mode (deal_sevens_to_michael)
+        # This allows the game to play out normally for testing
+        if getattr(self, 'deal_sevens_to_michael', False):
+            return None
+
+        # 7s are natural only if current_wild_rank is NOT '7'
+        if self.current_wild_rank == '7':
+            return None  # No natural 7s possible when 7s are wild
+
+        # Check each active player
+        for player in self.players:
+            if player['folded']:
+                continue
+
+            # Count 7s in up cards (face up) only for instant win
+            # If 7s are in the hole, let game continue to showdown
+            up_cards = player.get('up_cards', [])
+            sevens_face_up = sum(1 for card in up_cards if card['rank'] == '7')
+
+            # Only trigger instant win if BOTH 7s are face up
+            if sevens_face_up >= 2:
+                return player
+
+        return None
+
+    def _handle_two_natural_sevens_win(self, winner):
+        """
+        Handle instant win from two natural 7s.
+        Awards entire pot to winner and ends the hand.
+
+        Returns:
+            Tuple of (results list, both_sevens_face_up boolean)
+        """
+        amount = self.pot
+        winner['chips'] += amount
+        winner['last_win'] = amount
+        self.pot = 0
+
+        # End the hand
+        self.game_started = False
+        self.phase = 'showdown'
+
+        # Check if both 7s are face up
+        sevens_in_hole = sum(1 for card in winner.get('down_cards', []) if card['rank'] == '7')
+        both_sevens_face_up = (sevens_in_hole == 0)
+
+        # Store winner id for auto-reveal (only if both 7s are face up)
+        if both_sevens_face_up:
+            self.two_sevens_winner_id = winner['id']
+        else:
+            self.two_sevens_winner_id = None
+
+        results = [{
+            'player': winner,
+            'amount': amount,
+            'hand': 'Two Natural 7s',
+            'win_type': 'two_natural_sevens',
+            'player_id': winner['id']
+        }]
+
+        return results, both_sevens_face_up
 
     def advance_phase(self):
         """Move to the next phase and deal appropriate cards."""
@@ -1330,6 +1425,28 @@ class StudFollowQueenGame(BasePokerGame):
             winner['last_win'] = self.pot
             self.game_started = False
             return [{'player': winner, 'amount': self.pot, 'hand': None, 'win_type': 'fold'}]
+
+        # Check for two natural 7s winner at showdown
+        if getattr(self, 'two_natural_sevens_wins', False) and self.current_wild_rank != '7':
+            for player in active:
+                all_cards = player.get('down_cards', []) + player.get('up_cards', [])
+                seven_count = sum(1 for card in all_cards if card['rank'] == '7')
+                if seven_count >= 2:
+                    # This player wins with two natural 7s
+                    amount = self.pot
+                    self.pot = 0
+                    player['chips'] += amount
+                    player['last_win'] = amount
+                    player['cards_revealed'] = True  # Reveal their cards
+                    self.game_started = False
+                    # Store for special win type detection
+                    return [{
+                        'player': player,
+                        'amount': amount,
+                        'hand': 'Two Natural 7s',
+                        'win_type': 'two_natural_sevens',
+                        'player_id': player['id']
+                    }]
 
         # Evaluate all hands
         self._evaluate_hands()
@@ -1523,7 +1640,9 @@ class StudFollowQueenGame(BasePokerGame):
             'community_cards': [],  # No community cards in Stud
             'ante_amount': self.ante_amount,
             'bring_in_amount': self.bring_in_amount,
-            'hi_lo': self.hi_lo
+            'hi_lo': self.hi_lo,
+            'two_natural_sevens_wins': getattr(self, 'two_natural_sevens_wins', False),
+            'deal_sevens_to_michael': getattr(self, 'deal_sevens_to_michael', False)
         }
 
 
@@ -1979,6 +2098,8 @@ def handle_new_game(data):
     game_mode = data.get('game_mode', 'stud_follow_queen')
     num_players = data.get('num_players', 6)
     hi_lo = data.get('hi_lo', False)
+    two_natural_sevens_wins = data.get('two_natural_sevens_wins', False)
+    deal_sevens_to_michael = data.get('deal_sevens_to_michael', False)
 
     # Save existing players and their session mappings if any
     existing_players = []
@@ -1991,7 +2112,9 @@ def handle_new_game(data):
             starting_chips=1000,
             ante_amount=5,
             bring_in_amount=10,
-            hi_lo=hi_lo
+            hi_lo=hi_lo,
+            two_natural_sevens_wins=two_natural_sevens_wins,
+            deal_sevens_to_michael=deal_sevens_to_michael
         )
     else:  # Default to Hold'em
         game = HoldemGame(
@@ -2000,14 +2123,20 @@ def handle_new_game(data):
             ante_amount=5
         )
 
-    # Re-add existing players to the new game
-    for player in existing_players:
-        game.add_player(player['session_id'], player['name'])
+    # Re-add existing players to the new game, preserving their chips
+    for old_player in existing_players:
+        player_id, _ = game.add_player(old_player['session_id'], old_player['name'])
+        if player_id is not None:
+            # Restore the player's chips from before the new game
+            game.players[player_id]['chips'] = old_player['chips']
         # Update taken_names to track this player
-        taken_names[player['session_id']] = player['name']
+        taken_names[old_player['session_id']] = old_player['name']
 
     # NOTE: Auto-start removed. Use "Start Game" button when ready.
     # Players can now join until game is manually started.
+
+    # Disable the New Game button for all players
+    socketio.emit('new_game_button_disabled', {}, room='poker_game')
 
     broadcast_game_state()
     broadcast_name_availability()
@@ -2028,6 +2157,17 @@ def handle_start_game():
 
     # Auto-deal the first hand
     game.new_hand()
+
+    # Check for two natural 7s instant win after initial deal
+    sevens_winner = game._check_two_natural_sevens()
+    if sevens_winner:
+        results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winner)
+        broadcast_game_state()
+        socketio.emit('game_locked', {'message': 'Game has started! No more players can join.'}, room='poker_game')
+        # Only show winner dialog if both 7s are face up
+        if both_sevens_face_up:
+            broadcast_two_sevens_win(results)
+        return
 
     broadcast_game_state()
     socketio.emit('game_locked', {'message': 'Game has started! No more players can join.'}, room='poker_game')
@@ -2050,6 +2190,17 @@ def handle_new_hand():
         return
 
     game.new_hand()
+
+    # Check for two natural 7s instant win after initial deal
+    sevens_winner = game._check_two_natural_sevens()
+    if sevens_winner:
+        results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winner)
+        broadcast_game_state()
+        # Only show winner dialog if both 7s are face up
+        if both_sevens_face_up:
+            broadcast_two_sevens_win(results)
+        return
+
     broadcast_game_state()
 
     # Check if first player is a bot
@@ -2134,6 +2285,61 @@ def handle_reveal_cards():
 
     print(f"{player['name']} revealed their down cards")
 
+@socketio.on('reveal_two_sevens_winner')
+def handle_reveal_two_sevens_winner():
+    """Auto-reveal the two natural 7s winner's cards at showdown, but only if both 7s are face up."""
+    global game
+
+    if not game:
+        return
+
+    # Check if there's a pending two sevens winner to reveal
+    winner_id = getattr(game, 'two_sevens_winner_id', None)
+    if winner_id is None:
+        return
+
+    # Clear the pending winner regardless
+    game.two_sevens_winner_id = None
+
+    # Only allow during showdown
+    if game.phase != 'showdown':
+        return
+
+    player = game.players[winner_id]
+
+    # Count 7s in down cards (hole cards)
+    sevens_in_hole = sum(1 for card in player.get('down_cards', []) if card['rank'] == '7')
+
+    # Only auto-reveal if NO 7s are in the hole (both 7s are face up)
+    # If any 7 is in the hole, player must manually reveal
+    if sevens_in_hole > 0:
+        print(f"{player['name']} has {sevens_in_hole} seven(s) in the hole - not auto-revealing")
+        return
+
+    # Both 7s are face up, so auto-reveal the down cards
+    player['cards_revealed'] = True
+
+    # Get the player's actual down cards
+    down_cards = []
+    for card in player.get('down_cards', []):
+        down_cards.append({
+            'rank': card['rank'],
+            'suit': card['suit'],
+            'hidden': False
+        })
+
+    # Broadcast to all players that this player revealed their cards
+    socketio.emit('cards_revealed', {
+        'player_id': winner_id,
+        'player_name': player['name'],
+        'cards': down_cards
+    }, room='poker_game')
+
+    # Broadcast updated game state
+    broadcast_game_state()
+
+    print(f"{player['name']}'s cards auto-revealed at showdown (both 7s were face up)")
+
 @socketio.on('player_action')
 def handle_player_action(data):
     """Handle player action."""
@@ -2175,6 +2381,17 @@ def handle_advance_phase():
     if not game:
         return
     game.advance_phase()
+
+    # Check for two natural 7s instant win after dealing new cards
+    sevens_winner = game._check_two_natural_sevens()
+    if sevens_winner:
+        results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winner)
+        broadcast_game_state()
+        # Only show winner dialog if both 7s are face up
+        if both_sevens_face_up:
+            broadcast_two_sevens_win(results)
+        return
+
     broadcast_game_state()
 
     if game.phase == 'showdown':
@@ -2189,6 +2406,12 @@ def handle_determine_winner():
     if not game:
         return
     winners = game.determine_winners()
+
+    # Check if this is a two natural 7s win
+    if winners and winners[0].get('win_type') == 'two_natural_sevens':
+        broadcast_two_sevens_win(winners)
+        return
+
     socketio.emit('winners', {
         'winners': [{
             'player': {
@@ -2204,8 +2427,29 @@ def handle_determine_winner():
     }, room='poker_game')
     broadcast_game_state()
 
+    # Re-enable the New Game button for all players
+    socketio.emit('new_game_button_enabled', {}, room='poker_game')
+
     # Game stays at showdown - no auto-deal
     # Players can review cards and click "New Hand" when ready
+
+def broadcast_two_sevens_win(results):
+    """Broadcast special two natural 7s win to all clients."""
+    socketio.emit('two_sevens_win', {
+        'winners': [{
+            'player': {
+                'name': w['player']['name'],
+                'chips': w['player']['chips']
+            },
+            'amount': w['amount'],
+            'hand': w['hand'],
+            'win_type': w['win_type'],
+            'player_id': w.get('player_id')
+        } for w in results]
+    }, room='poker_game')
+    broadcast_game_state()
+    # Re-enable the New Game button for all players
+    socketio.emit('new_game_button_enabled', {}, room='poker_game')
 
 def broadcast_game_state():
     """Broadcast game state to all connected clients."""
@@ -2242,6 +2486,28 @@ HTML_TEMPLATE = '''
            =========================================== */
         :root {
             --card-hover-scale: 1.55;  /* Card enlargement on hover (1.55 = 55% larger) */
+        }
+
+        .royal-flush-icon {
+            display: inline-block;
+            width: 1.2em;
+            height: 1.2em;
+            background-image: url('/royal-flush-icon.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            vertical-align: middle;
+            margin-right: 0.2em;
+            transition: transform 0.2s ease;
+        }
+
+        .royal-flush-icon:hover {
+            transform: scale(1.5);
+        }
+
+        .royal-flush-icon.large {
+            width: 2em;
+            height: 2em;
         }
 
         * {
@@ -2630,6 +2896,14 @@ HTML_TEMPLATE = '''
         .btn-primary {
             background: linear-gradient(145deg, #ffd700, #ffaa00);
             color: #1a3555;
+        }
+
+        .btn-primary:disabled,
+        .btn-primary.disabled {
+            background: linear-gradient(145deg, #666, #555);
+            color: #999;
+            cursor: not-allowed;
+            opacity: 0.6;
         }
 
         .btn-bet-amount {
@@ -3044,7 +3318,7 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div class="header">
-        <h1 id="gameTitle">🃏 Our Poker Games (HiLo) - Multiplayer</h1>
+        <h1 id="gameTitle"><span class="royal-flush-icon"></span> The Royal Flushers - Multiplayer</h1>
         <div class="token-info">💰 100 tokens = $1.00</div>
     </div>
 
@@ -3079,7 +3353,15 @@ HTML_TEMPLATE = '''
             <input type="checkbox" id="hiLoMode" style="width: 18px; height: 18px; cursor: pointer;">
             <label for="hiLoMode" style="color: #ffd700; font-weight: bold; cursor: pointer;" title="Split pot between best high and best qualifying low hand (8-or-better)">Hi-Lo</label>
         </div>
-        <button class="btn btn-primary" onclick="newGame()" style="color: white;">New Game</button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="twoSevensMode" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="twoSevensMode" style="color: #ff6b6b; font-weight: bold; cursor: pointer;" title="Two natural (non-wild) 7s wins the pot instantly">2x7 Wins</label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="dealSevensToMichael" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="dealSevensToMichael" style="color: #9b59b6; font-weight: bold; cursor: pointer;" title="Debug: Deal two 7s to Michael H">7s-MH</label>
+        </div>
+        <button class="btn btn-primary" onclick="newGame()" id="newGameBtn" style="color: white;">New Game</button>
         <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none; color: white;">Start Game</button>
         <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none; color: white;">New Hand</button>
         <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="display: none; background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">🔄 Reset Server</button>
@@ -3197,7 +3479,7 @@ HTML_TEMPLATE = '''
                 </div>
 
                 <div class="info-section" style="border-left-color: #ff69b4; background: rgba(255,105,180,0.1);">
-                    <h3>11. Five of a Kind 🃏</h3>
+                    <h3>11. Five of a Kind <span class="royal-flush-icon"></span></h3>
                     <p><strong>Wild cards only!</strong> Five cards of same rank.</p>
                     <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">♠</span> K<span style="color:red;">♥</span> K<span style="color:red;">♦</span> K<span style="color:black;">♣</span> Q<span style="color:red;">♥</span><span style="color:#ff69b4;">(wild)</span></div>
                     <p style="font-size: 0.85rem; color: #ff69b4; margin-top: 5px;">Queens are always wild in Follow the Queen!</p>
@@ -3205,7 +3487,7 @@ HTML_TEMPLATE = '''
             </div>
 
             <div class="info-section" style="margin-top: 20px; background: rgba(255,215,0,0.1); border-left-color: #ffd700;">
-                <h3>🃏 Wild Cards in Follow the Queen</h3>
+                <h3><span class="royal-flush-icon"></span> Wild Cards in Follow the Queen</h3>
                 <p><strong>Queens are always wild.</strong> When a Queen is dealt face-up, the next face-up card's rank also becomes wild. Wild cards can substitute for ANY card to make the best hand!</p>
             </div>
 
@@ -3261,7 +3543,7 @@ HTML_TEMPLATE = '''
         <!-- Wild Card Panel (Stud only) -->
         <div id="wildCardPanel" style="display: none;">
             <div class="current-wild" id="currentWild">
-                🃏 Wild Cards: <span style="font-size: 3rem;">Queens Only</span>
+                <span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 3rem;">Queens Only</span>
             </div>
             <div class="wild-history" id="wildHistory">
                 <div class="wild-change-badge">No wild card changes yet</div>
@@ -3294,6 +3576,7 @@ HTML_TEMPLATE = '''
                     <div class="phase-display">
                         Phase: <span id="studPhaseDisplay">-</span>
                         <span id="hiLoBadge" style="display: none; margin-left: 10px; background: linear-gradient(145deg, #e74c3c, #27ae60); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">HI-LO</span>
+                        <span id="twoSevensBadge" style="display: none; margin-left: 10px; background: linear-gradient(145deg, #ff6b6b, #c0392b); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">2x7 WINS</span>
                     </div>
                 </div>
 
@@ -3410,7 +3693,7 @@ HTML_TEMPLATE = '''
             myPlayerName = data.name;
             document.getElementById('joinSection').style.display = 'none';
             document.getElementById('gameControls').style.display = 'flex';
-            document.getElementById('gameTitle').textContent = `🃏 Poker - Multiplayer - ${data.name}`;
+            document.getElementById('gameTitle').innerHTML = `<span class="royal-flush-icon"></span> Poker - Multiplayer - ${data.name}`;
             updateResetButtonVisibility();
             updateStatusMessage();
         });
@@ -3445,6 +3728,18 @@ HTML_TEMPLATE = '''
                 hiLoCheckbox.checked = state.hi_lo;
             }
 
+            // Sync Two Sevens checkbox with current game state
+            const twoSevensCheckbox = document.getElementById('twoSevensMode');
+            if (twoSevensCheckbox && state.two_natural_sevens_wins !== undefined) {
+                twoSevensCheckbox.checked = state.two_natural_sevens_wins;
+            }
+
+            // Sync Deal Sevens to Michael checkbox with current game state
+            const dealSevensCheckbox = document.getElementById('dealSevensToMichael');
+            if (dealSevensCheckbox && state.deal_sevens_to_michael !== undefined) {
+                dealSevensCheckbox.checked = state.deal_sevens_to_michael;
+            }
+
             updateDisplay();
             updateButtons();
             updateStatusMessage();
@@ -3452,6 +3747,20 @@ HTML_TEMPLATE = '''
 
         socket.on('game_locked', (data) => {
             console.log(data.message);
+        });
+
+        socket.on('new_game_button_disabled', () => {
+            const newGameBtn = document.getElementById('newGameBtn');
+            if (newGameBtn) {
+                newGameBtn.disabled = true;
+            }
+        });
+
+        socket.on('new_game_button_enabled', () => {
+            const newGameBtn = document.getElementById('newGameBtn');
+            if (newGameBtn) {
+                newGameBtn.disabled = false;
+            }
         });
 
         socket.on('game_reset', (data) => {
@@ -3564,6 +3873,59 @@ HTML_TEMPLATE = '''
             console.log('Hand complete:', winnerText);
         });
 
+        // Handle two natural 7s instant win
+        socket.on('two_sevens_win', (data) => {
+            let winnerHTML = '';
+
+            data.winners.forEach(w => {
+                winnerHTML += `<div class="winner-entry">
+                    <div class="winner-name" style="color: #ff6b6b;">${w.player.name}</div>
+                    <div style="color: #ff6b6b; font-weight: bold; font-size: 1.2rem;">🎰 TWO NATURAL 7s! 🎰</div>
+                    <div class="winner-amount">Wins ${formatMoney(w.amount)} tokens ($${tokensToDollars(w.amount)})</div>
+                    <div class="winner-hand" style="color: #ff6b6b;">Instant Win - Two Natural 7s</div>
+                </div>`;
+            });
+
+            // Show the winner modal with special styling
+            const winnerDetails = document.getElementById('winnerDetails');
+            const winnerModal = document.getElementById('winnerModal');
+            if (winnerDetails && winnerModal) {
+                winnerDetails.innerHTML = winnerHTML;
+                winnerModal.style.display = 'flex';
+
+                // Start countdown timer
+                let countdown = 10;
+                const countdownEl = document.getElementById('winnerCountdown');
+                if (countdownEl) countdownEl.textContent = countdown;
+
+                if (winnerCountdownInterval) {
+                    clearInterval(winnerCountdownInterval);
+                }
+
+                winnerCountdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdownEl) countdownEl.textContent = countdown;
+                    if (countdown <= 0) {
+                        closeWinnerModal(true);
+                    }
+                }, 1000);
+            }
+
+            // Update status message
+            const w = data.winners[0];
+            const statusEl = document.getElementById('gameStatus');
+            if (statusEl) {
+                statusEl.innerHTML = `<strong style="color: #ff6b6b; font-size: 1.3rem;">🎰 ${w.player.name} WINS WITH TWO NATURAL 7s! 🎰</strong><br>Wins ${formatMoney(w.amount)} tokens instantly!`;
+            }
+
+            // Auto-reveal the winner's cards after a delay (3 seconds)
+            setTimeout(() => {
+                socket.emit('reveal_two_sevens_winner');
+            }, 3000);
+
+            console.log('Two Natural 7s Win:', w.player.name);
+        });
+
         // Handle card reveal from other players
         socket.on('cards_revealed', (data) => {
             console.log('Cards revealed by player:', data.player_name, data.cards);
@@ -3634,7 +3996,15 @@ HTML_TEMPLATE = '''
         function newGame() {
             const numPlayers = parseInt(document.getElementById('numPlayers').value);
             const hiLo = document.getElementById('hiLoMode').checked;
-            socket.emit('new_game', { game_mode: 'stud_follow_queen', num_players: numPlayers, hi_lo: hiLo });
+            const twoSevens = document.getElementById('twoSevensMode').checked;
+            const dealSevensToMichael = document.getElementById('dealSevensToMichael').checked;
+            socket.emit('new_game', {
+                game_mode: 'stud_follow_queen',
+                num_players: numPlayers,
+                hi_lo: hiLo,
+                two_natural_sevens_wins: twoSevens,
+                deal_sevens_to_michael: dealSevensToMichael
+            });
         }
 
         function startGame() {
@@ -3763,7 +4133,7 @@ HTML_TEMPLATE = '''
             // Current wild rank
             const wildRank = gameState.current_wild_rank;
             const wildText = wildRank === 'Q' ? 'Queens Only' : `Queens and ${wildRank}s`;
-            currentWildEl.innerHTML = `🃏 Wild Cards: <span style="font-size: 3rem;">${wildText}</span>`;
+            currentWildEl.innerHTML = `<span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 3rem;">${wildText}</span>`;
 
             // Wild card history
             if (gameState.wild_card_history && gameState.wild_card_history.length > 0) {
@@ -4181,6 +4551,12 @@ HTML_TEMPLATE = '''
             if (hiLoBadge) {
                 hiLoBadge.style.display = gameState.hi_lo ? 'inline-block' : 'none';
             }
+
+            // Show/hide Two Sevens badge
+            const twoSevensBadge = document.getElementById('twoSevensBadge');
+            if (twoSevensBadge) {
+                twoSevensBadge.style.display = gameState.two_natural_sevens_wins ? 'inline-block' : 'none';
+            }
             } catch (error) {
                 console.error('Error in renderStudTable:', error);
             }
@@ -4304,9 +4680,9 @@ HTML_TEMPLATE = '''
                 const gameTitle = gameMode === 'holdem' ? "Texas Hold'em Poker" : "Follow the Queen Poker";
                 const titleElement = document.getElementById('gameTitle');
                 if (titleElement && myPlayerName) {
-                    titleElement.textContent = `🃏 ${gameTitle} - Multiplayer - ${myPlayerName}`;
+                    titleElement.innerHTML = `<span class="royal-flush-icon"></span> ${gameTitle} - Multiplayer - ${myPlayerName}`;
                 } else if (titleElement) {
-                    titleElement.textContent = `🃏 ${gameTitle} - Multiplayer`;
+                    titleElement.innerHTML = `<span class="royal-flush-icon"></span> ${gameTitle} - Multiplayer`;
                 }
 
                 // Route to appropriate renderer based on game mode
@@ -4487,6 +4863,10 @@ HTML_TEMPLATE = '''
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
+
+@app.route('/royal-flush-icon.png')
+def royal_flush_icon():
+    return send_file('royal flush in heart.png', mimetype='image/png')
 
 @app.route('/api/new-game', methods=['POST'])
 def api_new_game():
