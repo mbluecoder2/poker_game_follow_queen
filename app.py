@@ -2143,15 +2143,20 @@ def handle_new_game(data):
 
 @socketio.on('start_game')
 def handle_start_game():
-    """Lock the game, prevent new players from joining, and auto-deal the first hand."""
+    """Lock the game, prevent new players from joining, and auto-deal the first hand. Only dealer can start."""
     if len(game.players) < 2:
         emit('error', {'message': 'Need at least 2 players to start the game'})
+        return
+
+    # Check if only dealer can start game
+    player_id = game.get_player_by_session(request.sid)
+    if player_id is None or player_id != game.dealer_position:
+        emit('error', {'message': 'Only the dealer can start the game'})
         return
 
     game.game_started = True
 
     # Set dealer so that after new_hand() increments it, the starting player becomes dealer
-    player_id = game.get_player_by_session(request.sid)
     if player_id is not None:
         game.dealer_position = (player_id - 1) % len(game.players)
 
@@ -2208,10 +2213,18 @@ def handle_new_hand():
 
 @socketio.on('reset_game')
 def handle_reset_game():
-    """Reset the entire game - only Michael H can do this. Hard server restart."""
+    """Reset the entire game - dealer or non-joined players can do this. Hard server restart."""
     global game, taken_names
 
     player_id = game.get_player_by_session(request.sid) if game else None
+
+    # Check if only dealer can reset game (but allow if player hasn't joined yet)
+    if game and len(game.players) > 0 and player_id is not None:
+        # Player is in the game - must be dealer to reset
+        if player_id != game.dealer_position:
+            emit('error', {'message': 'Only the dealer can reset the server'})
+            return
+    # If player_id is None, they haven't joined yet - allow reset
 
     # Get player name if available, otherwise use "A USER"
     if game and player_id is not None:
@@ -3364,7 +3377,7 @@ HTML_TEMPLATE = '''
         <button class="btn btn-primary" onclick="newGame()" id="newGameBtn" style="color: white;">New Game</button>
         <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none; color: white;">Start Game</button>
         <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none; color: white;">New Hand</button>
-        <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="display: none; background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">🔄 Reset Server</button>
+        <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">🔄 Reset Server</button>
         <button class="btn btn-primary" onclick="toggleAlgorithmInfo()" style="color: white;">📚 Shuffle Info</button>
         <button class="btn btn-primary" onclick="toggleHandRankings()" style="background: linear-gradient(145deg, #9b59b6, #8e44ad); color: white;">🏆 Hand Rankings</button>
     </div>
@@ -3615,7 +3628,7 @@ HTML_TEMPLATE = '''
             <h2>🏆 Winner!</h2>
             <div class="winner-details" id="winnerDetails"></div>
             <button class="btn btn-primary" id="winnerCloseBtn" onclick="closeWinnerModal()">
-                Continue (<span id="winnerCountdown">10</span>s)
+                Continue (<span id="winnerCountdown">35</span>s)
             </button>
         </div>
     </div>
@@ -3836,7 +3849,7 @@ HTML_TEMPLATE = '''
                 winnerModal.style.display = 'flex';
 
                 // Start countdown timer
-                let countdown = 10;
+                let countdown = 35;
                 const countdownEl = document.getElementById('winnerCountdown');
                 if (countdownEl) countdownEl.textContent = countdown;
 
@@ -3894,7 +3907,7 @@ HTML_TEMPLATE = '''
                 winnerModal.style.display = 'flex';
 
                 // Start countdown timer
-                let countdown = 10;
+                let countdown = 35;
                 const countdownEl = document.getElementById('winnerCountdown');
                 if (countdownEl) countdownEl.textContent = countdown;
 
@@ -4042,18 +4055,27 @@ HTML_TEMPLATE = '''
                 return;
             }
 
+            const isDealer = gameState.my_player_id === gameState.dealer_position;
+
             // Show Start Game button if game hasn't started yet
             if (!gameState.game_started) {
                 startGameBtn.style.display = 'inline-block';
                 newHandBtn.style.display = 'none';
-                startGameBtn.disabled = gameState.players.length < 2;
+                // Only dealer can start game, and need at least 2 players
+                if (isDealer && gameState.players.length >= 2) {
+                    startGameBtn.disabled = false;
+                    startGameBtn.style.opacity = '1';
+                } else {
+                    startGameBtn.disabled = true;
+                    startGameBtn.style.opacity = '0.5';
+                }
             } else {
                 // Game has started - show New Hand button only for dealer
                 startGameBtn.style.display = 'none';
                 newHandBtn.style.display = 'inline-block';
 
                 // Only enable if this player is the dealer
-                if (gameState.my_player_id === gameState.dealer_position) {
+                if (isDealer) {
                     newHandBtn.disabled = false;
                     newHandBtn.style.opacity = '1';
                 } else {
@@ -4061,16 +4083,38 @@ HTML_TEMPLATE = '''
                     newHandBtn.style.opacity = '0.5';
                 }
             }
+
+            // Reset Server button - dealer can use it (or anyone if not yet joined)
+            const resetBtn = document.getElementById('resetGameBtn');
+            if (resetBtn) {
+                if (isDealer) {
+                    resetBtn.disabled = false;
+                    resetBtn.style.opacity = '1';
+                } else {
+                    resetBtn.disabled = true;
+                    resetBtn.style.opacity = '0.5';
+                }
+            }
+        }
+
+        function updateResetButtonForJoinScreen() {
+            // On join screen (before joining), anyone can reset
+            const resetBtn = document.getElementById('resetGameBtn');
+            if (resetBtn) {
+                resetBtn.disabled = false;
+                resetBtn.style.opacity = '1';
+            }
         }
 
         function updateResetButtonVisibility() {
             const resetBtn = document.getElementById('resetGameBtn');
-            // Only show reset button for "Michael H"
-            //if (myPlayerName === "Michael H") {
             resetBtn.style.display = 'inline-block';
-            //} else {
-            //    resetBtn.style.display = 'none';
-            //}
+            // On join screen (not yet in game), enable for everyone
+            // Once in game, updateButtons() will restrict to dealer only
+            if (!gameState || gameState.my_player_id === null || gameState.my_player_id === undefined) {
+                resetBtn.disabled = false;
+                resetBtn.style.opacity = '1';
+            }
         }
 
         function updateStatusMessage() {
