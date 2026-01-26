@@ -2499,6 +2499,53 @@ HTML_TEMPLATE = '''
            =========================================== */
         :root {
             --card-hover-scale: 1.55;  /* Card enlargement on hover (1.55 = 55% larger) */
+
+            /* Card dimensions */
+            --card-width: 60px;
+            --card-height: 84px;
+            --card-community-width: 70px;
+            --card-community-height: 98px;
+
+            /* Font sizes */
+            --font-body: 14px;
+            --font-critical: 16px;
+            --font-pot: 1.5rem;
+
+            /* Colors - Traditional Green Felt (default) */
+            --bg-body: linear-gradient(135deg, #1a3a5a 0%, #0d1a2d 100%);
+            --bg-table: radial-gradient(ellipse at center, #2d4a6d 0%, #1a3555 70%);
+            --bg-player-spot: rgba(0,0,0,0.4);
+            --border-table: #3d4d5c;
+            --text-primary: #fff;
+            --text-accent: #ffd700;
+            --card-red: #cc0000;
+            --card-black: #000;
+        }
+
+        /* High Contrast Dark Mode */
+        [data-theme="dark"] {
+            --bg-body: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            --bg-table: radial-gradient(ellipse at center, #1a1a1a 0%, #0d0d0d 70%);
+            --text-accent: #ffff00;
+            --card-red: #ff3333;
+            --card-black: #ffffff;
+        }
+
+        /* Colorblind Enhanced Mode */
+        [data-theme="colorblind"] {
+            --card-red: #ff6600;   /* Orange instead of red */
+            --card-black: #000000; /* Keep black as black */
+        }
+
+        /* Large Format Mode */
+        [data-display-mode="large"] {
+            --card-width: 120px;
+            --card-height: 168px;
+            --card-community-width: 140px;
+            --card-community-height: 196px;
+            --font-body: 20px;
+            --font-critical: 30px;
+            --font-pot: 2rem;
         }
 
         .royal-flush-icon {
@@ -2531,9 +2578,10 @@ HTML_TEMPLATE = '''
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a3a5a 0%, #0d1a2d 100%);
+            background: var(--bg-body);
             min-height: 100vh;
-            color: #fff;
+            color: var(--text-primary);
+            font-size: var(--font-body);
             overflow-x: hidden;
         }
         
@@ -2568,8 +2616,8 @@ HTML_TEMPLATE = '''
         
         /* Poker Table */
         .poker-table {
-            background: radial-gradient(ellipse at center, #2d4a6d 0%, #1a3555 70%);
-            border: 15px solid #3d4d5c;
+            background: var(--bg-table);
+            border: 15px solid var(--border-table);
             border-radius: 150px;
             padding: 30px;
             margin: 20px auto;
@@ -2587,8 +2635,8 @@ HTML_TEMPLATE = '''
         }
         
         .pot-amount {
-            font-size: 1.5rem;
-            color: #ffd700;
+            font-size: var(--font-pot);
+            color: var(--text-accent);
             background: rgba(0,0,0,0.5);
             padding: 10px 30px;
             border-radius: 25px;
@@ -2629,7 +2677,7 @@ HTML_TEMPLATE = '''
         }
         
         .player-spot {
-            background: rgba(0,0,0,0.4);
+            background: var(--bg-player-spot);
             border-radius: 15px;
             padding: 15px;
             min-width: 180px;
@@ -2716,8 +2764,8 @@ HTML_TEMPLATE = '''
         
         /* Cards */
         .card {
-            width: 60px;
-            height: 84px;
+            width: var(--card-width);
+            height: var(--card-height);
             background: #fff;
             border-radius: 6px;
             display: flex;
@@ -2762,8 +2810,8 @@ HTML_TEMPLATE = '''
         }
         
         .card.community {
-            width: 70px;
-            height: 98px;
+            width: var(--card-community-width);
+            height: var(--card-community-height);
         }
         
         .card.placeholder {
@@ -2793,11 +2841,11 @@ HTML_TEMPLATE = '''
         }
         
         .card.hearts, .card.diamonds {
-            color: #cc0000;
+            color: var(--card-red);
         }
-        
+
         .card.clubs, .card.spades {
-            color: #000;
+            color: var(--card-black);
         }
         
         .card-center {
@@ -3327,6 +3375,199 @@ HTML_TEMPLATE = '''
             0%, 100% { opacity: 0.6; }
             50% { opacity: 1; }
         }
+
+        /* =============================================
+           LARGE FORMAT MODE STYLES
+           ============================================= */
+        .large-format-wrapper {
+            display: none;
+        }
+
+        [data-display-mode="large"] .large-format-wrapper {
+            display: grid;
+            grid-template-rows: 35% 30%;
+            height: calc(100vh - 120px);
+            gap: 10px;
+            padding: 10px;
+        }
+
+        [data-display-mode="large"] #holdemTable,
+        [data-display-mode="large"] #studTable {
+            display: none !important;
+        }
+
+        /* Large Format Card Text - doubled sizes */
+        [data-display-mode="large"] .card-rank {
+            font-size: 28px;
+        }
+
+        [data-display-mode="large"] .card-suit {
+            font-size: 24px;
+        }
+
+        [data-display-mode="large"] .card-center {
+            font-size: 48px;
+        }
+
+        /* Large Format Zones */
+        .lf-opponents-zone {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            flex-wrap: wrap;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .lf-center-zone {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-table);
+            border-radius: 30px;
+            padding: 20px 40px;
+            border: 8px solid var(--border-table);
+        }
+
+        .lf-center-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .lf-player-zone {
+            display: none;
+        }
+
+        [data-display-mode="large"] .lf-player-zone-inline {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            padding: 15px 25px;
+            margin-left: 30px;
+            background: rgba(0, 100, 200, 0.3);
+            border-radius: 20px;
+            border: 3px solid rgba(0, 170, 255, 0.5);
+        }
+
+        .lf-folded-strip {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            z-index: 500;
+        }
+
+        .lf-folded-toggle {
+            background: rgba(0,0,0,0.7);
+            color: var(--text-accent);
+            border: 2px solid var(--text-accent);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: var(--font-body);
+            font-weight: bold;
+        }
+
+        .lf-folded-players {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .lf-folded-strip:hover .lf-folded-players,
+        .lf-folded-strip.expanded .lf-folded-players {
+            display: flex;
+        }
+
+        .lf-folded-player {
+            font-size: 14px;
+            color: #888;
+            padding: 4px 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+        }
+
+        /* Large Format Player Spot */
+        .lf-player-spot {
+            background: var(--bg-player-spot);
+            border-radius: 20px;
+            padding: 20px;
+            min-width: 250px;
+            text-align: center;
+            border: 4px solid transparent;
+        }
+
+        .lf-player-spot.active {
+            border-color: var(--text-accent);
+            box-shadow: 0 0 30px rgba(255,215,0,0.5);
+        }
+
+        .lf-player-spot.current-player {
+            background: rgba(0,100,200,0.4);
+            border-color: #00aaff;
+        }
+
+        .lf-player-spot .player-name {
+            font-size: var(--font-critical);
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .lf-player-spot .player-chips {
+            font-size: calc(var(--font-critical) * 0.8);
+            color: var(--text-accent);
+            margin-bottom: 10px;
+        }
+
+        .lf-player-spot .player-cards {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        /* Large format pot display */
+        .lf-pot-display {
+            font-size: var(--font-critical);
+            color: var(--text-accent);
+            background: rgba(0,0,0,0.6);
+            padding: 15px 40px;
+            border-radius: 30px;
+            margin-bottom: 20px;
+        }
+
+        .lf-community-cards {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        /* Theme dropdown styling */
+        .theme-select, .display-mode-select {
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.9);
+            color: #1a3555;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .theme-select:hover, .display-mode-select:hover {
+            background: #fff;
+        }
     </style>
 </head>
 <body>
@@ -3349,19 +3590,6 @@ HTML_TEMPLATE = '''
     </div>
 
     <div class="controls-bar" id="gameControls" style="display: none;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <label for="numPlayers" style="color: #ffd700; font-weight: bold;">Players:</label>
-            <select id="numPlayers" class="btn" style="padding: 10px; background: rgba(255,255,255,0.9); color: #1a3555; cursor: pointer;">
-                <option value="2">2 Players</option>
-                <option value="3">3 Players</option>
-                <option value="4">4 Players</option>
-                <option value="5" selected>5 Players</option>
-                <option value="6">6 Players</option>
-                <option value="7">7 Players</option>
-                <option value="8">8 Players</option>
-                <option value="9">9 Players</option>
-            </select>
-        </div>
         <div style="display: flex; align-items: center; gap: 8px;">
             <input type="checkbox" id="hiLoMode" style="width: 18px; height: 18px; cursor: pointer;">
             <label for="hiLoMode" style="color: #ffd700; font-weight: bold; cursor: pointer;" title="Split pot between best high and best qualifying low hand (8-or-better)">Hi-Lo</label>
@@ -3380,6 +3608,17 @@ HTML_TEMPLATE = '''
         <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">🔄 Reset Server</button>
         <button class="btn btn-primary" onclick="toggleAlgorithmInfo()" style="color: white;">📚 Shuffle Info</button>
         <button class="btn btn-primary" onclick="toggleHandRankings()" style="background: linear-gradient(145deg, #9b59b6, #8e44ad); color: white;">🏆 Hand Rankings</button>
+        <div style="display: flex; align-items: center; gap: 8px; margin-left: 10px;">
+            <select id="displayMode" class="display-mode-select" onchange="setDisplayMode(this.value)" title="Display Mode">
+                <option value="standard">Standard</option>
+                <option value="large">Large Format</option>
+            </select>
+            <select id="themeSelect" class="theme-select" onchange="setTheme(this.value)" title="Color Theme">
+                <option value="green">Green Felt</option>
+                <option value="dark">Dark Mode</option>
+                <option value="colorblind">Colorblind</option>
+            </select>
+        </div>
     </div>
     
     <div class="game-container">
@@ -3599,6 +3838,30 @@ HTML_TEMPLATE = '''
             </div>
         </div>
 
+        <!-- Large Format Layout (for elderly/vision-impaired users) -->
+        <div class="large-format-wrapper" id="largeFormatWrapper">
+            <div class="lf-opponents-zone" id="lfOpponentsZone">
+                <!-- Top 3-4 active opponents appear here -->
+            </div>
+            <div class="lf-center-zone" id="lfCenterZone">
+                <!-- Pot and community cards -->
+                <div class="lf-center-content">
+                    <div class="lf-pot-display" id="lfPotDisplay">Pot: 0 tokens</div>
+                    <div class="lf-community-cards" id="lfCommunityCards"></div>
+                    <div class="phase-display" id="lfPhaseDisplay">Phase: -</div>
+                </div>
+                <!-- Current player's cards on the right -->
+                <div class="lf-player-zone-inline" id="lfPlayerZone">
+                </div>
+            </div>
+            <div class="lf-player-zone" id="lfPlayerZoneOld" style="display:none;">
+            </div>
+            <div class="lf-folded-strip" id="lfFoldedStrip">
+                <button class="lf-folded-toggle" onclick="toggleFoldedStrip()">Folded (<span id="foldedCount">0</span>)</button>
+                <div class="lf-folded-players" id="lfFoldedPlayers"></div>
+            </div>
+        </div>
+
         <div class="action-panel" id="actionPanel" style="display: none;">
             <div class="action-buttons" id="actionButtons">
                 <button class="btn btn-fold" onclick="playerAction('fold')">Fold</button>
@@ -3645,6 +3908,56 @@ HTML_TEMPLATE = '''
         let gameState = null;
         let sessionId = null;
         let myPlayerName = null;
+
+        // Display mode and theme preferences
+        let currentDisplayMode = 'standard';
+        let currentTheme = 'green';
+
+        function setDisplayMode(mode) {
+            currentDisplayMode = mode;
+            document.body.setAttribute('data-display-mode', mode);
+            savePreferences();
+            if (gameState) updateDisplay();
+        }
+
+        function setTheme(theme) {
+            currentTheme = theme;
+            document.body.setAttribute('data-theme', theme);
+            savePreferences();
+        }
+
+        function savePreferences() {
+            if (!myPlayerName) return;
+            localStorage.setItem(`poker_prefs_${myPlayerName}`,
+                JSON.stringify({ theme: currentTheme, displayMode: currentDisplayMode }));
+        }
+
+        function loadPreferences() {
+            if (!myPlayerName) return;
+            const saved = localStorage.getItem(`poker_prefs_${myPlayerName}`);
+            if (saved) {
+                try {
+                    const prefs = JSON.parse(saved);
+                    if (prefs.theme) {
+                        currentTheme = prefs.theme;
+                        document.body.setAttribute('data-theme', prefs.theme);
+                        document.getElementById('themeSelect').value = prefs.theme;
+                    }
+                    if (prefs.displayMode) {
+                        currentDisplayMode = prefs.displayMode;
+                        document.body.setAttribute('data-display-mode', prefs.displayMode);
+                        document.getElementById('displayMode').value = prefs.displayMode;
+                    }
+                } catch (e) {
+                    console.log('Error loading preferences:', e);
+                }
+            }
+        }
+
+        function toggleFoldedStrip() {
+            const strip = document.getElementById('lfFoldedStrip');
+            if (strip) strip.classList.toggle('expanded');
+        }
 
         // Show loading state in dropdown initially
         function setDropdownLoading(loading) {
@@ -3709,6 +4022,7 @@ HTML_TEMPLATE = '''
             document.getElementById('gameTitle').innerHTML = `<span class="royal-flush-icon"></span> Poker - Multiplayer - ${data.name}`;
             updateResetButtonVisibility();
             updateStatusMessage();
+            loadPreferences();
         });
 
         socket.on('join_failed', (data) => {
@@ -4007,13 +4321,12 @@ HTML_TEMPLATE = '''
         }
 
         function newGame() {
-            const numPlayers = parseInt(document.getElementById('numPlayers').value);
             const hiLo = document.getElementById('hiLoMode').checked;
             const twoSevens = document.getElementById('twoSevensMode').checked;
             const dealSevensToMichael = document.getElementById('dealSevensToMichael').checked;
             socket.emit('new_game', {
                 game_mode: 'stud_follow_queen',
-                num_players: numPlayers,
+                num_players: 7,
                 hi_lo: hiLo,
                 two_natural_sevens_wins: twoSevens,
                 deal_sevens_to_michael: dealSevensToMichael
@@ -4705,6 +5018,163 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // Large Format Mode Rendering
+        function renderLargeFormatTable() {
+            if (!gameState) return;
+
+            try {
+                const gameMode = gameState.game_mode || 'holdem';
+                const myPlayer = gameState.players.find(p => p.id === gameState.my_player_id);
+
+                // Separate active and folded players
+                const activePlayers = gameState.players.filter(p => !p.folded && p.id !== gameState.my_player_id);
+                const foldedPlayers = gameState.players.filter(p => p.folded);
+
+                // Sort active opponents by chip stack (highest first)
+                activePlayers.sort((a, b) => b.chips - a.chips);
+
+                // Take top 3-4 opponents
+                const displayOpponents = activePlayers.slice(0, 4);
+
+                // Render opponents zone
+                const opponentsZone = document.getElementById('lfOpponentsZone');
+                if (opponentsZone) {
+                    let opponentsHTML = '';
+                    displayOpponents.forEach((player, idx) => {
+                        const isActive = gameState.players.indexOf(player) === gameState.current_player && !gameState.round_complete;
+                        opponentsHTML += renderLargeFormatPlayer(player, isActive, gameMode);
+                    });
+                    opponentsZone.innerHTML = opponentsHTML;
+                }
+
+                // Render center zone (pot + community cards)
+                const potDisplay = document.getElementById('lfPotDisplay');
+                if (potDisplay) {
+                    potDisplay.innerHTML = `Pot: ${formatMoney(gameState.pot)} tokens ($${tokensToDollars(gameState.pot)})`;
+                }
+
+                const phaseDisplay = document.getElementById('lfPhaseDisplay');
+                if (phaseDisplay) {
+                    const phaseNames = {
+                        'pre_deal': 'Waiting',
+                        'pre_flop': 'Pre-Flop',
+                        'flop': 'Flop',
+                        'turn': 'Turn',
+                        'river': 'River',
+                        'showdown': 'Showdown',
+                        'ante': 'Ante',
+                        'third_street': '3rd Street',
+                        'fourth_street': '4th Street',
+                        'fifth_street': '5th Street',
+                        'sixth_street': '6th Street',
+                        'seventh_street': '7th Street'
+                    };
+                    phaseDisplay.innerHTML = `Phase: ${phaseNames[gameState.phase] || gameState.phase}`;
+                }
+
+                // Render community cards (for Hold'em) or wild card info (for Stud)
+                const communityCards = document.getElementById('lfCommunityCards');
+                if (communityCards) {
+                    if (gameMode === 'holdem' && gameState.community_cards) {
+                        let cardsHTML = '';
+                        for (let i = 0; i < 5; i++) {
+                            if (gameState.community_cards[i]) {
+                                cardsHTML += createCardHTML(gameState.community_cards[i], true);
+                            } else {
+                                cardsHTML += '<div class="card community placeholder"></div>';
+                            }
+                        }
+                        communityCards.innerHTML = cardsHTML;
+                    } else if (gameMode === 'stud_follow_queen') {
+                        // Show wild card info for stud
+                        const wildRank = gameState.current_wild_rank;
+                        const wildText = wildRank === 'Q' ? 'Queens Only' : `Queens + ${wildRank}s`;
+                        const wildCardInfo = `<div style="font-size: var(--font-critical); color: #ff69b4;">Wild: ${wildText}</div>`;
+                        communityCards.innerHTML = wildCardInfo;
+                    }
+                }
+
+                // Render player zone (my cards)
+                const playerZone = document.getElementById('lfPlayerZone');
+                if (playerZone && myPlayer) {
+                    const isMyTurn = gameState.is_my_turn && !gameState.round_complete;
+                    playerZone.innerHTML = renderLargeFormatPlayer(myPlayer, isMyTurn, gameMode, true);
+                }
+
+                // Update folded strip
+                const foldedCount = document.getElementById('foldedCount');
+                if (foldedCount) {
+                    foldedCount.textContent = foldedPlayers.length;
+                }
+
+                const foldedPlayersDiv = document.getElementById('lfFoldedPlayers');
+                if (foldedPlayersDiv) {
+                    let foldedHTML = '';
+                    foldedPlayers.forEach(player => {
+                        foldedHTML += `<div class="lf-folded-player">${player.name} (${formatMoney(player.chips)})</div>`;
+                    });
+                    foldedPlayersDiv.innerHTML = foldedHTML || '<div class="lf-folded-player">No folded players</div>';
+                }
+            } catch (error) {
+                console.error('Error in renderLargeFormatTable:', error);
+            }
+        }
+
+        function renderLargeFormatPlayer(player, isActive, gameMode, isCurrentPlayer = false) {
+            const classes = [
+                'lf-player-spot',
+                isActive ? 'active' : '',
+                isCurrentPlayer ? 'current-player' : '',
+                player.folded ? 'folded' : ''
+            ].filter(Boolean).join(' ');
+
+            let statusHTML = '';
+            if (player.folded) {
+                statusHTML = '<span class="player-status status-folded">FOLDED</span>';
+            } else if (player.is_all_in) {
+                statusHTML = '<span class="player-status status-all-in">ALL IN</span>';
+            }
+
+            let handResultHTML = '';
+            if (player.hand_result && gameState.phase === 'showdown') {
+                handResultHTML = `<div class="hand-result" style="font-size: calc(var(--font-critical) * 0.7);">${player.hand_result.name}</div>`;
+            }
+
+            // Render cards based on game mode
+            let cardsHTML = '';
+            if (gameMode === 'holdem') {
+                cardsHTML = player.hole_cards ? player.hole_cards.map(c => createCardHTML(c)).join('') : '';
+            } else if (gameMode === 'stud_follow_queen') {
+                // Stud mode: show down cards and up cards
+                if (player.down_cards) {
+                    cardsHTML += '<div class="down-cards-group" style="display: flex; gap: 5px;">';
+                    cardsHTML += player.down_cards.map(c => createCardHTML(c)).join('');
+                    cardsHTML += '</div>';
+                }
+                if (player.up_cards) {
+                    cardsHTML += '<div class="up-cards-group" style="display: flex; gap: 5px; margin-top: 5px;">';
+                    cardsHTML += player.up_cards.map(c => createCardHTML(c)).join('');
+                    cardsHTML += '</div>';
+                }
+            }
+
+            return `
+                <div class="${classes}">
+                    <div class="player-name">
+                        ${player.name}
+                        ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
+                    </div>
+                    <div class="player-chips">${formatMoney(player.chips)} tokens</div>
+                    ${player.current_bet > 0 ? `<div class="player-bet" style="font-size: calc(var(--font-body) * 0.9);">Bet: ${formatMoney(player.current_bet)}</div>` : ''}
+                    <div class="player-cards">
+                        ${cardsHTML}
+                    </div>
+                    ${statusHTML}
+                    ${handResultHTML}
+                </div>
+            `;
+        }
+
         function updateDisplay() {
             if (!gameState) return;
 
@@ -4729,12 +5199,21 @@ HTML_TEMPLATE = '''
                     titleElement.innerHTML = `<span class="royal-flush-icon"></span> ${gameTitle} - Multiplayer`;
                 }
 
-                // Route to appropriate renderer based on game mode
-                if (gameMode === 'holdem') {
-                    renderHoldemTable(gameState);
-                } else if (gameMode === 'stud_follow_queen') {
-                    updateWildCardDisplay(gameState);
-                    renderStudTable(gameState);
+                // Route to appropriate renderer based on display mode and game mode
+                if (currentDisplayMode === 'large') {
+                    // Large format mode - use simplified layout for both game types
+                    if (gameMode === 'stud_follow_queen') {
+                        updateWildCardDisplay(gameState);
+                    }
+                    renderLargeFormatTable();
+                } else {
+                    // Standard mode - use original renderers
+                    if (gameMode === 'holdem') {
+                        renderHoldemTable(gameState);
+                    } else if (gameMode === 'stud_follow_queen') {
+                        updateWildCardDisplay(gameState);
+                        renderStudTable(gameState);
+                    }
                 }
 
                 // Update action panel (common to both)
