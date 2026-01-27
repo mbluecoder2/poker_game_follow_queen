@@ -15,7 +15,7 @@ HTML_TEMPLATE = '''
            CONFIGURABLE SETTINGS
            =========================================== */
         :root {
-            --card-hover-scale: 1.55;  /* Card enlargement on hover (1.55 = 55% larger) */
+            --card-hover-scale: 2.5;  /* Card enlargement on hover (2.5 = 150% larger) */
 
             /* Card dimensions */
             --card-width: 60px;
@@ -29,8 +29,8 @@ HTML_TEMPLATE = '''
             --font-pot: 1.5rem;
 
             /* Colors - Traditional Green Felt (default) */
-            --bg-body: linear-gradient(135deg, #1a4d2e 0%, #0d2818 100%);
-            --bg-table: radial-gradient(ellipse at center, #35654d 0%, #1e4d35 70%);
+            --bg-body: linear-gradient(135deg, #1e5a35 0%, #0f3320 100%);
+            --bg-table: radial-gradient(ellipse at center, #4a9d6b 0%, #2d7a4a 70%);
             --bg-player-spot: rgba(0,0,0,0.4);
             --border-table: #8b4513;
             --text-primary: #fff;
@@ -238,7 +238,30 @@ HTML_TEMPLATE = '''
             justify-content: center;
             border: 2px solid #ffd700;
         }
-        
+
+        .player-number {
+            background: linear-gradient(145deg, #4a90d9, #2e5a8a);
+            color: #fff;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #87ceeb;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+
+        [data-display-mode="large"] .player-number {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            border-width: 3px;
+        }
+
         .player-chips {
             color: #ffd700;
             margin: 5px 0;
@@ -1068,6 +1091,40 @@ HTML_TEMPLATE = '''
             justify-content: center;
             gap: 15px;
             margin: 20px 0;
+        }
+
+        /* Large format info boxes */
+        .lf-info-box {
+            font-size: 28px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border-radius: 15px;
+            margin: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .lf-wild-info {
+            background: rgba(255, 105, 180, 0.3);
+            border: 3px solid #ff69b4;
+            color: #ffb6c1;
+        }
+
+        .lf-phase-info {
+            background: rgba(0, 150, 255, 0.3);
+            border: 3px solid #00aaff;
+            color: #87cefa;
+        }
+
+        [data-display-mode="large"] #lfPhaseDisplay {
+            font-size: 28px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border-radius: 15px;
+            margin: 10px;
+            background: rgba(0, 150, 255, 0.3);
+            border: 3px solid #00aaff;
+            color: #87cefa;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
 
         /* Theme dropdown styling */
@@ -2369,6 +2426,7 @@ HTML_TEMPLATE = '''
                     <div class="stud-player-card ${isActive ? 'active' : ''} ${player.folded ? 'folded' : ''}">
                         <div class="player-info">
                             <div class="player-name">
+                                <span class="player-number">${idx + 1}</span>
                                 ${player.name}
                                 ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                             </div>
@@ -2515,6 +2573,7 @@ HTML_TEMPLATE = '''
                 playersHTML += `
                     <div class="${classes}">
                         <div class="player-name">
+                            <span class="player-number">${idx + 1}</span>
                             ${player.name}
                             ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                         </div>
@@ -2606,7 +2665,7 @@ HTML_TEMPLATE = '''
                         // Show wild card info for stud
                         const wildRank = gameState.current_wild_rank;
                         const wildText = wildRank === 'Q' ? 'Queens Only' : `Queens + ${wildRank}s`;
-                        const wildCardInfo = `<div style="font-size: var(--font-critical); color: #ff69b4;">Wild: ${wildText}</div>`;
+                        const wildCardInfo = `<div class="lf-info-box lf-wild-info">Wild: ${wildText}</div>`;
                         communityCards.innerHTML = wildCardInfo;
                     }
                 }
@@ -2678,6 +2737,7 @@ HTML_TEMPLATE = '''
             return `
                 <div class="${classes}">
                     <div class="player-name">
+                        <span class="player-number">${player.id + 1}</span>
                         ${player.name}
                         ${player.is_dealer ? '<span class="dealer-chip">D</span>' : ''}
                     </div>
