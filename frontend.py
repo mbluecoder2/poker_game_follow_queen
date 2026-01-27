@@ -83,8 +83,8 @@ HTML_TEMPLATE = '''
         }
 
         .royal-flush-icon.large {
-            width: 2em;
-            height: 2em;
+            width: 5.4em;
+            height: 5.4em;
         }
 
         * {
@@ -126,9 +126,10 @@ HTML_TEMPLATE = '''
         }
         
         .game-container {
-            max-width: 1600px;
+            width: 100%;
+            max-width: none;
             margin: 0 auto;
-            padding: 20px;
+            padding: 20px 40px;
         }
         
         /* Poker Table */
@@ -576,10 +577,46 @@ HTML_TEMPLATE = '''
         /* Status Messages */
         .game-status {
             text-align: center;
-            padding: 10px;
-            font-size: 1.5rem;
+            padding: 15px 20px;
+            font-size: 2rem;
+            font-weight: bold;
             color: #ffffff;
-            min-height: 55px;
+            min-height: 70px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            margin: 10px 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-status .turn-indicator {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 25px;
+            animation: turnPulse 1.5s ease-in-out infinite;
+        }
+
+        .game-status .turn-indicator.my-turn {
+            background: linear-gradient(145deg, #2ecc71, #27ae60);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.6);
+        }
+
+        .game-status .turn-indicator.waiting {
+            background: linear-gradient(145deg, #f39c12, #e67e22);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(243, 156, 18, 0.6);
+        }
+
+        .game-status .player-name-highlight {
+            color: #ffd700;
+            font-size: 2.2rem;
+            text-decoration: underline;
+            text-underline-offset: 4px;
+        }
+
+        @keyframes turnPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
         }
         
         /* Winner Announcement */
@@ -751,49 +788,95 @@ HTML_TEMPLATE = '''
         /* Wild Card Panel Prominence */
         #wildCardPanel {
             background: linear-gradient(135deg, #8b008b 0%, #ff1493 100%);
-            border: 3px solid #ff69b4;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px auto;
-            max-width: 1600px;
-            box-shadow: 0 0 30px rgba(255, 105, 180, 0.6);
-            animation: wildGlow 2s ease-in-out infinite;
+            border: 8px solid #ff69b4;
+            border-radius: 40px;
+            padding: 54px;
+            margin: 54px auto;
+            max-width: min(84vw, calc(100vw - 60px));
+            box-shadow: 0 0 80px rgba(255, 105, 180, 0.6);
+            animation: wildGlow 2s ease-in-out infinite,
+                       wildShrink 1s ease-out 1s forwards,
+                       wildShrink2 1s ease-out 2.75s forwards,
+                       panelStretch 1s ease-out 4.5s forwards;
+            transform: scale(1.3);
+            transform-origin: center top;
         }
 
         @keyframes wildGlow {
-            0%, 100% { box-shadow: 0 0 30px rgba(255, 105, 180, 0.6); }
-            50% { box-shadow: 0 0 50px rgba(255, 105, 180, 1); }
+            0%, 100% { box-shadow: 0 0 80px rgba(255, 105, 180, 0.6); }
+            50% { box-shadow: 0 0 135px rgba(255, 105, 180, 1); }
+        }
+
+        @keyframes wildShrink {
+            0% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes wildShrink2 {
+            0% { transform: scale(1); }
+            100% { transform: scale(0.7); }
+        }
+
+        @keyframes panelStretch {
+            0% { transform: scale(0.7); }
+            100% { transform: scale(1.5, 0.3); }
         }
 
         #wildCardPanel .current-wild {
-            font-size: 2.5rem;
+            font-size: 6.75rem;
             color: #ffd700;
             text-align: center;
             font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            text-shadow: 5px 5px 10px rgba(0,0,0,0.8);
+            white-space: nowrap;
+            animation: textShrink 1s ease-out 2.75s forwards,
+                       textShrink2 1s ease-out 4.5s forwards;
+        }
+
+        @keyframes textShrink {
+            0% { transform: scale(1); }
+            100% { transform: scale(0.7); }
+        }
+
+        @keyframes textShrink2 {
+            0% { transform: scale(0.7); }
+            100% { transform: scale(0.2, 1); }
+        }
+
+        @keyframes historyStretch {
+            0% { transform: scale(1); }
+            100% { transform: scale(0.2, 1); }
         }
 
         #wildCardPanel .wild-history {
-            margin-top: 15px;
+            margin-top: 40px;
             display: flex;
-            gap: 10px;
+            gap: 27px;
             justify-content: center;
             flex-wrap: wrap;
+            animation: historyStretch 1s ease-out 4.5s forwards;
         }
 
         .wild-change-badge {
             background: rgba(0,0,0,0.3);
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
+            padding: 22px 40px;
+            border-radius: 54px;
+            font-size: 2.4rem;
+            animation: badgeEnlarge 0.5s ease-out 5.5s forwards;
+        }
+
+        @keyframes badgeEnlarge {
+            0% { font-size: 2.4rem; }
+            100% { font-size: 6.72rem; }
         }
 
         /* Stud Player Card Layout */
         .stud-players-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 20px;
-            max-width: 1400px;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 25px;
+            width: 100%;
+            max-width: none;
             margin: 0 auto;
             padding: 20px;
         }
@@ -999,6 +1082,13 @@ HTML_TEMPLATE = '''
             bottom: 100px;
             right: 20px;
             z-index: 500;
+            transform: scale(1.4);
+            transform-origin: bottom right;
+            transition: transform 0.3s ease;
+        }
+
+        .lf-folded-strip:hover {
+            transform: scale(2.8);
         }
 
         .lf-folded-toggle {
@@ -1031,7 +1121,7 @@ HTML_TEMPLATE = '''
 
         .lf-folded-player {
             font-size: 14px;
-            color: #888;
+            color: #fff;
             padding: 4px 8px;
             background: rgba(255,255,255,0.1);
             border-radius: 5px;
@@ -1141,6 +1231,102 @@ HTML_TEMPLATE = '''
 
         .theme-select:hover, .display-mode-select:hover {
             background: #fff;
+        }
+
+        /* Fold Announcement Popup */
+        .fold-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            z-index: 1100;
+            background: linear-gradient(145deg, #2d1a1a, #1a0d0d);
+            border: 4px solid #ff4444;
+            border-radius: 25px;
+            padding: 30px 50px;
+            text-align: center;
+            box-shadow: 0 0 60px rgba(255, 68, 68, 0.6),
+                        0 0 100px rgba(255, 68, 68, 0.3),
+                        inset 0 0 30px rgba(255, 68, 68, 0.1);
+            animation: foldPopIn 0.5s ease forwards;
+        }
+
+        .fold-popup.show {
+            display: block;
+        }
+
+        .fold-popup.hiding {
+            animation: foldPopOut 0.3s ease forwards;
+        }
+
+        @keyframes foldPopIn {
+            0% { transform: translate(-50%, -50%) scale(0) rotate(-10deg); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.1) rotate(2deg); }
+            100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        @keyframes foldPopOut {
+            from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            to { transform: translate(-50%, -50%) scale(0) rotate(10deg); opacity: 0; }
+        }
+
+        .fold-popup-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            animation: foldIconPulse 0.8s ease-in-out infinite;
+        }
+
+        @keyframes foldIconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .fold-popup h2 {
+            color: #ff6666;
+            font-size: 2.5rem;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 20px rgba(255, 102, 102, 0.8);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .fold-popup .player-name {
+            color: #fff;
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0 20px 0;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .fold-popup-close {
+            background: linear-gradient(145deg, #ff4444, #cc2222);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 68, 68, 0.4);
+        }
+
+        .fold-popup-close:hover {
+            background: linear-gradient(145deg, #ff6666, #dd3333);
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(255, 68, 68, 0.6);
+        }
+
+        .fold-popup-timer {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            margin-left: 8px;
+            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -1369,7 +1555,7 @@ HTML_TEMPLATE = '''
         <!-- Wild Card Panel (Stud only) -->
         <div id="wildCardPanel" style="display: none;">
             <div class="current-wild" id="currentWild">
-                <span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 3rem;">Queens Only</span>
+                <span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 8.1rem;">Queens Only</span>
             </div>
             <div class="wild-history" id="wildHistory">
                 <div class="wild-change-badge">No wild card changes yet</div>
@@ -1468,6 +1654,16 @@ HTML_TEMPLATE = '''
                 Continue (<span id="winnerCountdown">35</span>s)
             </button>
         </div>
+    </div>
+
+    <!-- Fold Announcement Popup -->
+    <div class="fold-popup" id="foldPopup">
+        <div class="fold-popup-icon">🃏</div>
+        <h2>FOLDED!</h2>
+        <div class="player-name" id="foldPlayerName"></div>
+        <button class="fold-popup-close" id="foldCloseBtn" onclick="closeFoldPopup()">
+            OK <span class="fold-popup-timer" id="foldCountdown">5</span>
+        </button>
     </div>
 
     <script>
@@ -1846,6 +2042,65 @@ HTML_TEMPLATE = '''
             alert(data.message);
         });
 
+        // Handle fold announcement
+        let foldPopupTimer = null;
+        let foldCountdownInterval = null;
+
+        socket.on('player_folded', (data) => {
+            showFoldPopup(data.player_name);
+        });
+
+        function showFoldPopup(playerName) {
+            const popup = document.getElementById('foldPopup');
+            const nameEl = document.getElementById('foldPlayerName');
+            const countdownEl = document.getElementById('foldCountdown');
+
+            // Clear any existing timers
+            if (foldPopupTimer) clearTimeout(foldPopupTimer);
+            if (foldCountdownInterval) clearInterval(foldCountdownInterval);
+
+            // Set the player name
+            nameEl.textContent = playerName;
+
+            // Reset and show popup
+            popup.classList.remove('hiding');
+            popup.classList.add('show');
+
+            // Start countdown
+            let countdown = 5;
+            countdownEl.textContent = countdown;
+
+            foldCountdownInterval = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(foldCountdownInterval);
+                }
+            }, 1000);
+
+            // Auto-close after 5 seconds
+            foldPopupTimer = setTimeout(() => {
+                closeFoldPopup();
+            }, 5000);
+        }
+
+        function closeFoldPopup() {
+            const popup = document.getElementById('foldPopup');
+
+            // Clear timers
+            if (foldPopupTimer) clearTimeout(foldPopupTimer);
+            if (foldCountdownInterval) clearInterval(foldCountdownInterval);
+            foldPopupTimer = null;
+            foldCountdownInterval = null;
+
+            // Animate out
+            popup.classList.add('hiding');
+
+            setTimeout(() => {
+                popup.classList.remove('show', 'hiding');
+            }, 300);
+        }
+
         // Game functions
         function updatePlayerNameDropdown(allNames, takenNames) {
             const dropdown = document.getElementById('playerName');
@@ -2012,14 +2267,15 @@ HTML_TEMPLATE = '''
             if (!gameState.game_started) {
                 const playerCount = gameState.players ? gameState.players.length : 0;
                 const maxPlayers = gameState.num_players || 6;
-                statusEl.textContent = `Waiting for additional players (${playerCount}/${maxPlayers}). Click "Start Game" when ready (minimum 2 players).`;
+                statusEl.innerHTML = `Waiting for additional players (${playerCount}/${maxPlayers}). Click "Start Game" when ready (minimum 2 players).`;
             } else if (gameState.phase === 'showdown') {
-                statusEl.textContent = 'Hand complete! Dealer can deal next hand.';
+                statusEl.innerHTML = 'Hand complete! Dealer can deal next hand.';
             } else if (gameState.is_my_turn) {
-                statusEl.textContent = 'Your turn to act!';
+                statusEl.innerHTML = `<span class="turn-indicator my-turn">YOUR TURN TO ACT!</span>`;
             } else if (gameState.players && gameState.current_player >= 0) {
                 const currentPlayer = gameState.players[gameState.current_player];
-                statusEl.textContent = `Waiting for ${currentPlayer ? currentPlayer.name : 'player'}...`;
+                const playerName = currentPlayer ? currentPlayer.name : 'player';
+                statusEl.innerHTML = `<span class="turn-indicator waiting">Waiting for <span class="player-name-highlight">${playerName}</span>...</span>`;
             }
         }
 
@@ -2064,7 +2320,7 @@ HTML_TEMPLATE = '''
             // Current wild rank
             const wildRank = gameState.current_wild_rank;
             const wildText = wildRank === 'Q' ? 'Queens Only' : `Queens and ${wildRank}s`;
-            currentWildEl.innerHTML = `<span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 3rem;">${wildText}</span>`;
+            currentWildEl.innerHTML = `<span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 8.1rem;">${wildText}</span>`;
 
             // Wild card history
             if (gameState.wild_card_history && gameState.wild_card_history.length > 0) {

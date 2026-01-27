@@ -871,6 +871,12 @@ def register_socket_handlers(socketio_instance):
         if not success:
             emit('error', {'message': message})
         else:
+            # Emit fold announcement to all players
+            if action == 'fold':
+                socketio.emit('player_folded', {
+                    'player_name': current_player_obj['name']
+                }, room='poker_game')
+
             broadcast_game_state()
 
             # Check if hand is over
