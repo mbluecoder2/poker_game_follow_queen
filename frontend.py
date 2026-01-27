@@ -29,10 +29,10 @@ HTML_TEMPLATE = '''
             --font-pot: 1.5rem;
 
             /* Colors - Traditional Green Felt (default) */
-            --bg-body: linear-gradient(135deg, #1a3a5a 0%, #0d1a2d 100%);
-            --bg-table: radial-gradient(ellipse at center, #2d4a6d 0%, #1a3555 70%);
+            --bg-body: linear-gradient(135deg, #1a4d2e 0%, #0d2818 100%);
+            --bg-table: radial-gradient(ellipse at center, #35654d 0%, #1e4d35 70%);
             --bg-player-spot: rgba(0,0,0,0.4);
-            --border-table: #3d4d5c;
+            --border-table: #8b4513;
             --text-primary: #fff;
             --text-accent: #ffd700;
             --card-red: #cc0000;
