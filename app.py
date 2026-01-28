@@ -8,13 +8,13 @@ import os
 import logging
 import secrets
 
-from flask import Flask, render_template_string, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO  # type: ignore[import-untyped]
 
 # Import from modules
 from evaluators import create_deck, shuffle_deck
 from game_classes import HoldemGame, StudFollowQueenGame
-from frontend import HTML_TEMPLATE
+# frontend.py no longer needed - using templates/index.html
 from handlers import (
     init_handlers,
     register_socket_handlers,
@@ -55,11 +55,7 @@ register_socket_handlers(socketio)
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/royal-flush-icon.png')
-def royal_flush_icon():
-    return send_file('royal flush in heart.png', mimetype='image/png')
+    return render_template('index.html')
 
 @app.route('/api/new-game', methods=['POST'])
 def api_new_game():

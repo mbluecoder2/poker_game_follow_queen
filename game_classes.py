@@ -681,24 +681,25 @@ class StudFollowQueenGame(BasePokerGame):
 
     def _check_two_natural_sevens(self):
         """
-        Check if any player has two natural (non-wild) 7s.
+        Check if any player(s) have two natural (non-wild) 7s face up.
 
         Returns:
-            Player dict if a player has two natural 7s, None otherwise.
+            List of player dicts with two natural 7s face up, or empty list.
         """
         if not getattr(self, 'two_natural_sevens_wins', False):
-            return None
+            return []
 
         # Skip instant win check in debug mode (deal_sevens_to_michael)
         # This allows the game to play out normally for testing
         if getattr(self, 'deal_sevens_to_michael', False):
-            return None
+            return []
 
         # 7s are natural only if current_wild_rank is NOT '7'
         if self.current_wild_rank == '7':
-            return None  # No natural 7s possible when 7s are wild
+            return []  # No natural 7s possible when 7s are wild
 
-        # Check each active player
+        # Find ALL active players with two 7s face up
+        players_with_sevens = []
         for player in self.players:
             if player['folded']:
                 continue
@@ -710,46 +711,49 @@ class StudFollowQueenGame(BasePokerGame):
 
             # Only trigger instant win if BOTH 7s are face up
             if sevens_face_up >= 2:
-                return player
+                players_with_sevens.append(player)
 
-        return None
+        return players_with_sevens
 
-    def _handle_two_natural_sevens_win(self, winner):
+    def _handle_two_natural_sevens_win(self, winners):
         """
         Handle instant win from two natural 7s.
-        Awards entire pot to winner and ends the hand.
+        Awards pot to winner(s) and ends the hand. Splits pot on tie.
+
+        Args:
+            winners: List of players with two natural 7s
 
         Returns:
             Tuple of (results list, both_sevens_face_up boolean)
         """
-        amount = self.pot
-        winner['chips'] += amount
-        winner['last_win'] = amount
-        self.pot = 0
-
         # End the hand
         self.game_started = False
         self.phase = 'showdown'
 
-        # Check if both 7s are face up
-        sevens_in_hole = sum(1 for card in winner.get('down_cards', []) if card['rank'] == '7')
-        both_sevens_face_up = (sevens_in_hole == 0)
+        # Split pot among winners
+        share = self.pot // len(winners)
+        remainder = self.pot % len(winners)
+        results = []
 
-        # Store winner id for auto-reveal (only if both 7s are face up)
-        if both_sevens_face_up:
-            self.two_sevens_winner_id = winner['id']
-        else:
-            self.two_sevens_winner_id = None
+        for i, winner in enumerate(winners):
+            # First player gets any remainder chips
+            amount = share + (remainder if i == 0 else 0)
+            winner['chips'] += amount
+            winner['last_win'] = amount
+            results.append({
+                'player': winner,
+                'amount': amount,
+                'hand': 'Two Natural 7s',
+                'win_type': 'two_natural_sevens',
+                'player_id': winner['id']
+            })
 
-        results = [{
-            'player': winner,
-            'amount': amount,
-            'hand': 'Two Natural 7s',
-            'win_type': 'two_natural_sevens',
-            'player_id': winner['id']
-        }]
+        self.pot = 0
 
-        return results, both_sevens_face_up
+        # Store winner ids for auto-reveal
+        self.two_sevens_winner_id = winners[0]['id'] if len(winners) == 1 else None
+
+        return results, True  # Both 7s are face up (that's how we detected it)
 
     def advance_phase(self):
         """Move to the next phase and deal appropriate cards."""
@@ -859,27 +863,39 @@ class StudFollowQueenGame(BasePokerGame):
             self.game_started = False
             return [{'player': winner, 'amount': self.pot, 'hand': None, 'win_type': 'fold'}]
 
-        # Check for two natural 7s winner at showdown
+        # Check for two natural 7s winner(s) at showdown
         if getattr(self, 'two_natural_sevens_wins', False) and self.current_wild_rank != '7':
+            # Find ALL players with two natural 7s
+            players_with_sevens = []
             for player in active:
                 all_cards = player.get('down_cards', []) + player.get('up_cards', [])
                 seven_count = sum(1 for card in all_cards if card['rank'] == '7')
                 if seven_count >= 2:
-                    # This player wins with two natural 7s
-                    amount = self.pot
-                    self.pot = 0
+                    players_with_sevens.append(player)
+
+            # If any players have two natural 7s, they split the pot (tie)
+            if players_with_sevens:
+                share = self.pot // len(players_with_sevens)
+                remainder = self.pot % len(players_with_sevens)
+                results = []
+
+                for i, player in enumerate(players_with_sevens):
+                    # First player gets any remainder chips
+                    amount = share + (remainder if i == 0 else 0)
                     player['chips'] += amount
                     player['last_win'] = amount
                     player['cards_revealed'] = True  # Reveal their cards
-                    self.game_started = False
-                    # Store for special win type detection
-                    return [{
+                    results.append({
                         'player': player,
                         'amount': amount,
                         'hand': 'Two Natural 7s',
                         'win_type': 'two_natural_sevens',
                         'player_id': player['id']
-                    }]
+                    })
+
+                self.pot = 0
+                self.game_started = False
+                return results
 
         # Evaluate all hands
         self._evaluate_hands()

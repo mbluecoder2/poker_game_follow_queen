@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texas Hold'em Poker</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1 id="gameTitle"><span class="royal-flush-icon"></span> The Royal Flushers - Multiplayer</h1>
+        <div class="token-info">100 tokens = $1.00</div>
+    </div>
+
+    <div id="joinSection" class="controls-bar" style="flex-direction: column; gap: 15px;">
+        <div style="font-size: 1.2rem; color: #ffd700;">Join the Game</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <label for="playerName" style="color: #ffd700;">Your Name:</label>
+            <select id="playerName" style="padding: 10px; border-radius: 5px; border: none; min-width: 200px; background: white; color: #1a3555; font-weight: bold; cursor: pointer;">
+                <option value="">-- Select Your Name --</option>
+            </select>
+            <button class="btn btn-primary" onclick="joinGame()" style="color: white;">Join Game</button>
+            <button class="btn btn-primary" onclick="resetGame()" style="background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">Reset Server</button>
+        </div>
+        <div id="joinStatus" style="color: #ff6b6b;"></div>
+    </div>
+
+    <div class="controls-bar" id="gameControls" style="display: none;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="hiLoMode" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="hiLoMode" style="color: #ffd700; font-weight: bold; cursor: pointer;" title="Split pot between best high and best qualifying low hand (8-or-better)">Hi-Lo</label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="twoSevensMode" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="twoSevensMode" style="color: #ff6b6b; font-weight: bold; cursor: pointer;" title="Two natural (non-wild) 7s wins the pot instantly">2x7 Wins</label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="dealSevensToMichael" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="dealSevensToMichael" style="color: #9b59b6; font-weight: bold; cursor: pointer;" title="Debug: Deal two 7s to Michael H">7s-MH</label>
+        </div>
+        <button class="btn btn-primary" onclick="newGame()" id="newGameBtn" style="color: white;">New Game</button>
+        <button class="btn btn-primary" onclick="startGame()" id="startGameBtn" style="display: none; color: white;">Start Game</button>
+        <button class="btn btn-primary" onclick="newHand()" id="newHandBtn" style="display: none; color: white;">New Hand</button>
+        <button class="btn btn-primary" onclick="resetGame()" id="resetGameBtn" style="background: linear-gradient(145deg, #8fe73c, #c0392b); color: white;">Reset Server</button>
+        <button class="btn btn-primary" onclick="toggleAlgorithmInfo()" style="color: white;">Shuffle Info</button>
+        <button class="btn btn-primary" onclick="toggleHandRankings()" style="background: linear-gradient(145deg, #9b59b6, #8e44ad); color: white;">Hand Rankings</button>
+        <div style="display: flex; align-items: center; gap: 8px; margin-left: 10px;">
+            <select id="displayMode" class="display-mode-select" onchange="setDisplayMode(this.value)" title="Display Mode">
+                <option value="standard">Standard</option>
+                <option value="large">Large Format</option>
+            </select>
+            <select id="themeSelect" class="theme-select" onchange="setTheme(this.value)" title="Color Theme">
+                <option value="green">Green Felt</option>
+                <option value="dark">Dark Mode</option>
+                <option value="colorblind">Colorblind</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <div class="game-status" id="gameStatus">Select your name and click "Join Game" to enter.</div>
+
+        <div class="algorithm-info" id="algorithmInfo">
+            <h2>Fisher-Yates Shuffle Algorithm</h2>
+
+            <div class="info-section">
+                <h3>History & Origins</h3>
+                <p>The Fisher-Yates shuffle was originally described by <strong>Ronald Fisher</strong> and <strong>Frank Yates</strong> in their 1938 book "Statistical Tables for Biological, Agricultural and Medical Research." The modern computer-optimized version was developed by <strong>Richard Durstenfeld</strong> in 1964 and popularized by <strong>Donald Knuth</strong> in "The Art of Computer Programming."</p>
+            </div>
+
+            <div class="info-section">
+                <h3>How It Works</h3>
+                <p>The algorithm iterates from the last element to the first. For each position <em>i</em>, it randomly selects an element from positions 0 to <em>i</em> and swaps them.</p>
+                <div class="code-block">
+<pre>for i from n-1 down to 1:
+    j = random integer where 0 &lt;= j &lt;= i
+    swap array[i] with array[j]</pre>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3>Python Implementation</h3>
+                <div class="code-block">
+<pre>def fisher_yates_shuffle(deck):
+    for i in range(len(deck) - 1, 0, -1):
+        j = random.randint(0, i)
+        deck[i], deck[j] = deck[j], deck[i]
+    return deck</pre>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3>Why 7 Shuffles?</h3>
+                <p>Mathematician <strong>Persi Diaconis</strong> proved that <strong>7 riffle shuffles</strong> are needed to adequately randomize a 52-card deck. This relates to mixing time in Markov chains.</p>
+            </div>
+
+            <div class="info-section">
+                <h3>Mathematical Properties</h3>
+                <p><strong>Time Complexity:</strong> O(n) | <strong>Space:</strong> O(1) | <strong>Permutations:</strong> 52! = 8.07 x 10<sup>67</sup></p>
+            </div>
+        </div>
+
+        <!-- Hand Rankings Info -->
+        <div class="algorithm-info" id="handRankingsInfo">
+            <h2>Poker Hand Rankings</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">Ranked from lowest (1) to highest (11). Higher beats lower!</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+                <div class="info-section" style="border-left-color: #95a5a6;">
+                    <h3>1. High Card</h3>
+                    <p>No matching cards. Highest card plays.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&spades;</span> K<span style="color:red;">&hearts;</span> 9<span style="color:red;">&diams;</span> 7<span style="color:black;">&clubs;</span> 2<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #3498db;">
+                    <h3>2. One Pair</h3>
+                    <p>Two cards of the same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">&spades;</span> K<span style="color:red;">&hearts;</span> 9<span style="color:red;">&diams;</span> 7<span style="color:black;">&clubs;</span> 2<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #2ecc71;">
+                    <h3>3. Two Pair</h3>
+                    <p>Two different pairs.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">&spades;</span> K<span style="color:red;">&hearts;</span> 9<span style="color:red;">&diams;</span> 9<span style="color:black;">&clubs;</span> 2<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #f39c12;">
+                    <h3>4. Three of a Kind</h3>
+                    <p>Three cards of the same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">9<span style="color:black;">&spades;</span> 9<span style="color:red;">&hearts;</span> 9<span style="color:red;">&diams;</span> K<span style="color:black;">&clubs;</span> 2<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e74c3c;">
+                    <h3>5. Straight</h3>
+                    <p>Five consecutive ranks (any suits).</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">5<span style="color:black;">&spades;</span> 6<span style="color:red;">&hearts;</span> 7<span style="color:red;">&diams;</span> 8<span style="color:black;">&clubs;</span> 9<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #9b59b6;">
+                    <h3>6. Flush</h3>
+                    <p>Five cards of the same suit.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&spades;</span> K<span style="color:black;">&spades;</span> 9<span style="color:black;">&spades;</span> 7<span style="color:black;">&spades;</span> 2<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #1abc9c;">
+                    <h3>7. Full House</h3>
+                    <p>Three of a kind + a pair.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">9<span style="color:black;">&spades;</span> 9<span style="color:red;">&hearts;</span> 9<span style="color:red;">&diams;</span> K<span style="color:black;">&clubs;</span> K<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e67e22;">
+                    <h3>8. Four of a Kind</h3>
+                    <p>Four cards of the same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">9<span style="color:black;">&spades;</span> 9<span style="color:red;">&hearts;</span> 9<span style="color:red;">&diams;</span> 9<span style="color:black;">&clubs;</span> K<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #c0392b;">
+                    <h3>9. Straight Flush</h3>
+                    <p>Straight + flush combined.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">5<span style="color:black;">&spades;</span> 6<span style="color:black;">&spades;</span> 7<span style="color:black;">&spades;</span> 8<span style="color:black;">&spades;</span> 9<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #f1c40f;">
+                    <h3>10. Royal Flush</h3>
+                    <p>A-K-Q-J-10 all same suit. <strong>Rarest hand!</strong></p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&spades;</span> K<span style="color:black;">&spades;</span> Q<span style="color:black;">&spades;</span> J<span style="color:black;">&spades;</span> 10<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #ff69b4; background: rgba(255,105,180,0.1);">
+                    <h3>11. Five of a Kind <span class="royal-flush-icon"></span></h3>
+                    <p><strong>Wild cards only!</strong> Five cards of same rank.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">K<span style="color:black;">&spades;</span> K<span style="color:red;">&hearts;</span> K<span style="color:red;">&diams;</span> K<span style="color:black;">&clubs;</span> Q<span style="color:red;">&hearts;</span><span style="color:#ff69b4;">(wild)</span></div>
+                    <p style="font-size: 0.85rem; color: #ff69b4; margin-top: 5px;">Queens are always wild in Follow the Queen!</p>
+                </div>
+            </div>
+
+            <div class="info-section" style="margin-top: 20px; background: rgba(255,215,0,0.1); border-left-color: #ffd700;">
+                <h3><span class="royal-flush-icon"></span> Wild Cards in Follow the Queen</h3>
+                <p><strong>Queens are always wild.</strong> When a Queen is dealt face-up, the next face-up card's rank also becomes wild. Wild cards can substitute for ANY card to make the best hand!</p>
+            </div>
+
+            <h2 style="margin-top: 30px;">Low Hand Rankings (Hi-Lo & Lo Games)</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">In low games, the <strong>lowest</strong> hand wins. Aces play low. Straights and flushes don't count against you!</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+                <div class="info-section" style="border-left-color: #27ae60; background: rgba(39,174,96,0.1);">
+                    <h3>1. The Wheel (Best Low)</h3>
+                    <p>A-2-3-4-5 - The perfect low hand!</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&spades;</span> 2<span style="color:red;">&hearts;</span> 3<span style="color:red;">&diams;</span> 4<span style="color:black;">&clubs;</span> 5<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #2ecc71;">
+                    <h3>2. Six-Four Low</h3>
+                    <p>A-2-3-4-6 - Second best low.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:red;">&hearts;</span> 2<span style="color:black;">&spades;</span> 3<span style="color:black;">&clubs;</span> 4<span style="color:red;">&diams;</span> 6<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #3498db;">
+                    <h3>3. Six-Five Low</h3>
+                    <p>A-2-3-5-6 or A-2-4-5-6</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&clubs;</span> 2<span style="color:red;">&hearts;</span> 3<span style="color:black;">&spades;</span> 5<span style="color:red;">&diams;</span> 6<span style="color:red;">&hearts;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #9b59b6;">
+                    <h3>4. Seven Low</h3>
+                    <p>Any 5 unpaired cards, 7-high.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&spades;</span> 2<span style="color:red;">&diams;</span> 3<span style="color:black;">&clubs;</span> 4<span style="color:red;">&hearts;</span> 7<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e67e22;">
+                    <h3>5. Eight Low (Qualifier)</h3>
+                    <p>Any 5 unpaired cards, 8-high. Required to qualify in most Hi-Lo games!</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:red;">&hearts;</span> 2<span style="color:black;">&spades;</span> 4<span style="color:red;">&diams;</span> 6<span style="color:black;">&clubs;</span> 8<span style="color:black;">&spades;</span></div>
+                </div>
+
+                <div class="info-section" style="border-left-color: #e74c3c;">
+                    <h3>No Low / No Qualifier</h3>
+                    <p>Pairs, or cards 9+ disqualify a low hand in "8-or-better" games.</p>
+                    <div style="font-family: monospace; font-size: 1.1rem;">A<span style="color:black;">&spades;</span> 2<span style="color:red;">&hearts;</span> 3<span style="color:red;">&diams;</span> 3<span style="color:black;">&clubs;</span> 5<span style="color:black;">&spades;</span> X</div>
+                </div>
+            </div>
+
+            <div class="info-section" style="margin-top: 20px; background: rgba(46,204,113,0.1); border-left-color: #2ecc71;">
+                <h3>How Low Hands Work</h3>
+                <p><strong>Reading low hands:</strong> Compare from highest card down. A-2-3-4-6 beats A-2-3-5-6 because 4 &lt; 5.</p>
+                <p style="margin-top: 10px;"><strong>Eight-or-better:</strong> To qualify for low, all 5 cards must be 8 or lower with no pairs. If no one qualifies, the high hand wins the entire pot.</p>
+                <p style="margin-top: 10px;"><strong>Scooping:</strong> The same hand can win both high and low! A-2-3-4-5 is both the best low AND a straight for high.</p>
+            </div>
+        </div>
+
+        <!-- Wild Card Panel (Stud only) -->
+        <div id="wildCardPanel" style="display: none;">
+            <div class="current-wild" id="currentWild">
+                <span class="royal-flush-icon large"></span> Wild Cards: <span style="font-size: 8.1rem;">Queens Only</span>
+            </div>
+            <div class="wild-history" id="wildHistory">
+                <div class="wild-change-badge">No wild card changes yet</div>
+            </div>
+        </div>
+
+        <!-- Texas Hold'em Table -->
+        <div id="holdemTable">
+            <div class="poker-table" id="pokerTable">
+                <div class="pot-display">
+                    <div class="pot-amount">Pot: <span id="potAmount">0</span> tokens <span class="dollar-equiv">($<span id="potDollars">0.00</span>)</span></div>
+                    <div class="phase-display">Phase: <span id="phaseDisplay">-</span></div>
+                </div>
+
+                <div class="community-cards" id="communityCards">
+                    <!-- Community cards appear here -->
+                </div>
+
+                <div class="players-area" id="playersArea">
+                    <!-- Player spots appear here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Follow the Queen (Stud) Table -->
+        <div id="studTable">
+            <div class="poker-table">
+                <div class="pot-display">
+                    <div class="pot-amount">Pot: <span id="studPotAmount">0</span> tokens <span class="dollar-equiv">($<span id="studPotDollars">0.00</span>)</span></div>
+                    <div class="phase-display">
+                        Phase: <span id="studPhaseDisplay">-</span>
+                        <span id="hiLoBadge" style="display: none; margin-left: 10px; background: linear-gradient(145deg, #e74c3c, #27ae60); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">HI-LO</span>
+                        <span id="twoSevensBadge" style="display: none; margin-left: 10px; background: linear-gradient(145deg, #ff6b6b, #c0392b); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">2x7 WINS</span>
+                    </div>
+                </div>
+
+                <div class="stud-players-grid" id="studPlayersGrid">
+                    <!-- Stud player cards appear here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Large Format Layout (for elderly/vision-impaired users) -->
+        <div class="large-format-wrapper" id="largeFormatWrapper">
+            <div class="lf-opponents-zone" id="lfOpponentsZone">
+                <!-- Top 3-4 active opponents appear here -->
+            </div>
+            <div class="lf-center-zone" id="lfCenterZone">
+                <!-- Pot and community cards -->
+                <div class="lf-center-content">
+                    <div class="lf-pot-display" id="lfPotDisplay">Pot: 0 tokens</div>
+                    <div class="lf-community-cards" id="lfCommunityCards"></div>
+                    <div class="phase-display" id="lfPhaseDisplay">Phase: -</div>
+                </div>
+                <!-- Current player's cards on the right -->
+                <div class="lf-player-zone-inline" id="lfPlayerZone">
+                </div>
+            </div>
+            <div class="lf-player-zone" id="lfPlayerZoneOld" style="display:none;">
+            </div>
+            <div class="lf-folded-strip" id="lfFoldedStrip">
+                <button class="lf-folded-toggle" onclick="toggleFoldedStrip()">Folded (<span id="foldedCount">0</span>)</button>
+                <div class="lf-folded-players" id="lfFoldedPlayers"></div>
+            </div>
+        </div>
+
+        <div class="action-panel" id="actionPanel" style="display: none;">
+            <div class="action-buttons" id="actionButtons">
+                <button class="btn btn-fold" onclick="playerAction('fold')">Fold</button>
+                <button class="btn btn-check" id="checkCallBtn" onclick="playerAction('check')">Check</button>
+                <button class="btn btn-raise" onclick="showRaiseControls()">Raise</button>
+                <button class="btn btn-allin" onclick="playerAction('all-in')">All In</button>
+            </div>
+            <div class="raise-controls" id="raiseControls" style="display: none;">
+                <div class="bet-buttons" style="margin-bottom: 8px;">
+                    <button class="btn btn-bet-amount" onclick="addToBet(5)">+5</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(10)">+10</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(25)">+25</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(50)">+50</button>
+                    <button class="btn btn-bet-amount" onclick="addToBet(100)">+100</button>
+                    <button class="btn btn-clear-bet" onclick="clearBet()">Clear</button>
+                </div>
+                <span>Raise to:</span>
+                <input type="number" id="raiseAmount" class="raise-input" value="0" min="0">
+                <button class="btn btn-raise" onclick="playerAction('raise')">Confirm Raise</button>
+                <button class="btn" onclick="hideRaiseControls()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="winner-modal" id="winnerModal">
+        <div class="winner-content">
+            <h2>Winner!</h2>
+            <div class="winner-details" id="winnerDetails"></div>
+            <button class="btn btn-primary" id="winnerCloseBtn" onclick="closeWinnerModal()">
+                Continue (<span id="winnerCountdown">35</span>s)
+            </button>
+        </div>
+    </div>
+
+    <!-- Fold Announcement Popup -->
+    <div class="fold-popup" id="foldPopup">
+        <div class="fold-popup-icon">FOLD</div>
+        <h2>FOLDED!</h2>
+        <div class="player-name" id="foldPlayerName"></div>
+        <button class="fold-popup-close" id="foldCloseBtn" onclick="closeFoldPopup()">
+            OK <span class="fold-popup-timer" id="foldCountdown">5</span>
+        </button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>

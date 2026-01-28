@@ -516,9 +516,9 @@ def handle_advance_phase():
     game.advance_phase()
 
     # Check for two natural 7s instant win after dealing new cards
-    sevens_winner = game._check_two_natural_sevens()
-    if sevens_winner:
-        results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winner)
+    sevens_winners = game._check_two_natural_sevens()
+    if sevens_winners:
+        results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winners)
         broadcast_game_state()
         # Only show winner dialog if both 7s are face up
         if both_sevens_face_up:
@@ -662,9 +662,9 @@ def register_socket_handlers(socketio_instance):
         game.new_hand()
 
         # Check for two natural 7s instant win after initial deal
-        sevens_winner = game._check_two_natural_sevens()
-        if sevens_winner:
-            results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winner)
+        sevens_winners = game._check_two_natural_sevens()
+        if sevens_winners:
+            results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winners)
             broadcast_game_state()
             socketio.emit('game_locked', {'message': 'Game has started! No more players can join.'}, room='poker_game')
             # Only show winner dialog if both 7s are face up
@@ -695,9 +695,9 @@ def register_socket_handlers(socketio_instance):
         game.new_hand()
 
         # Check for two natural 7s instant win after initial deal
-        sevens_winner = game._check_two_natural_sevens()
-        if sevens_winner:
-            results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winner)
+        sevens_winners = game._check_two_natural_sevens()
+        if sevens_winners:
+            results, both_sevens_face_up = game._handle_two_natural_sevens_win(sevens_winners)
             broadcast_game_state()
             # Only show winner dialog if both 7s are face up
             if both_sevens_face_up:
