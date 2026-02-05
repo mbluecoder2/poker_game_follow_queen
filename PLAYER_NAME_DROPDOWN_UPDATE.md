@@ -17,7 +17,7 @@
   4. Mark A
   5. Ron R
   6. Peter R
-  7. Chunk G
+  7. Chuck G
   8. Andrew G
 
 ### 2. Real-time Name Availability ✅
@@ -39,7 +39,7 @@
 
 **1. Global Name Tracking (Line 1118-1130)**
 ```python
-PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G']
+PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chuck G', 'Andrew G']
 taken_names = {}  # Maps session_id to player_name
 
 def broadcast_name_availability():
@@ -304,7 +304,7 @@ Browser A                    Server                    Browser B
 **To add more names:**
 Edit `PLAYER_NAMES` in app.py:
 ```python
-PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'New Name']
+PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chuck G', 'Andrew G', 'New Name']
 ```
 
 **To change styling:**

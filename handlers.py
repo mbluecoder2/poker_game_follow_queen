@@ -19,7 +19,7 @@ from game_classes import StudFollowQueenGame, HoldemGame
 BOT_CAN_FOLD = False  # Set to True to allow bots to fold, False to prevent folding
 
 # Available player names
-PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chunk G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4', 'Bot 5']
+PLAYER_NAMES = ['Alan K', 'Andy L', 'Michael H', 'Mark A', 'Ron R', 'Peter R', 'Chuck G', 'Andrew G', 'Bot 1', 'Bot 2', 'Bot 3', 'Bot 4', 'Bot 5']
 
 # Global state (will be set by init_handlers)
 game = None
